@@ -23,10 +23,13 @@ If `worktree.yml` doesn't exist and the user requests a non-bootstrap operation,
 
 The `wt` CLI is installed at `.claude/bin/wt`. All slot operations go through it — no shell scripts needed.
 
-**Always use an absolute path** to invoke `wt` to avoid breakage when cd'd into subdirectories:
+**Always cd to the project root** before running `wt` commands. Each `wt` invocation must be a **separate Bash call** using the relative path so permissions match:
 ```bash
-WT="$(git rev-parse --show-toplevel)/.claude/bin/wt"
-$WT create 1 my-feature
+# First Bash call: set working directory
+cd "$(git rev-parse --show-toplevel)"
+
+# Subsequent Bash calls: use relative path (standalone, not combined with &&)
+.claude/bin/wt create 1 my-feature
 ```
 
 ---
@@ -165,7 +168,7 @@ For database isolation implementation, see [references/db-isolation.md](referenc
 Run `wt verify` to validate the generated `worktree.yml` against the actual project:
 
 ```bash
-$(git rev-parse --show-toplevel)/.claude/bin/wt verify
+.claude/bin/wt verify
 ```
 
 This checks:

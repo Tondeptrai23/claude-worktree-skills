@@ -113,7 +113,6 @@ func runInstall(c *cli.Context) error {
 	// 4. Update .gitignore
 	gitignorePath := filepath.Join(projectRoot, ".gitignore")
 	ensureGitignore(gitignorePath, ".claude/bin/")
-	ensureGitignore(gitignorePath, ".claude/worktree/")
 	ensureGitignore(gitignorePath, ".worktrees/")
 	ensureGitignore(gitignorePath, ".env.overrides")
 	fmt.Println("\033[32m[OK]\033[0m Updated .gitignore")

@@ -42,15 +42,18 @@ Before doing anything, verify:
 
 2. **Verify `wt` CLI exists** at `.claude/bin/wt`. If not, tell user to run the install script.
 
-   **Always resolve the absolute path** to avoid breakage when cd'd into subdirectories:
+   **Always cd to the project root** before running `wt` commands. The working directory persists between Bash calls, and each `wt` invocation must be a **separate Bash call** using the relative path so permissions match:
    ```bash
-   WT="$(git rev-parse --show-toplevel)/.claude/bin/wt"
+   # First Bash call: set working directory
+   cd "$(git rev-parse --show-toplevel)"
+
+   # Subsequent Bash calls: use relative path (standalone, not combined with &&)
+   .claude/bin/wt status
    ```
-   Use `$WT` for all subsequent commands.
 
 2b. **Run `wt verify`** to catch config issues before creating infrastructure:
    ```bash
-   $WT verify
+   .claude/bin/wt verify
    ```
    If errors are reported, fix `worktree.yml` before proceeding. If warnings about missing env_overrides are reported, add the suggested entries to `worktree.yml`.
 
@@ -62,7 +65,7 @@ Before doing anything, verify:
        [[ ! -d .worktrees/slot-${n} ]] && echo "$n" && break
    done
    ```
-   If all slots are occupied, run `$WT status` and ask user to destroy one.
+   If all slots are occupied, run `.claude/bin/wt status` and ask user to destroy one.
 
 5. **Quick health checks** (fail fast):
    - Disk space: `df --output=avail . | tail -1` — warn if < 5GB
@@ -82,7 +85,7 @@ If any critical check fails, report the issue and stop.
 ### Step 1: Create the worktree
 
 ```bash
-$WT create $SLOT $FEATURE_NAME --services $SERVICES
+.claude/bin/wt create $SLOT $FEATURE_NAME --services $SERVICES
 ```
 
 This handles: git worktree creation, env overrides, dependency install, DB setup + seed + migrations, nginx config regeneration.
@@ -92,7 +95,7 @@ If the command fails, report the error and clean up.
 ### Step 2: Start services
 
 ```bash
-$WT start $SLOT --services $SERVICES
+.claude/bin/wt start $SLOT --services $SERVICES
 ```
 
 This auto-starts nginx if not running (finding an available port if needed), merges env files (secrets + overrides), then launches the services.
@@ -119,7 +122,7 @@ done
 
 If a service doesn't come up within 60 seconds, check its log:
 ```bash
-$WT logs $SLOT $SERVICE
+.claude/bin/wt logs $SLOT $SERVICE
 ```
 Report the error and ask the user how to proceed.
 
@@ -145,7 +148,7 @@ Each service has its own subdirectory:
 {for each service in slot:}
   - {service}: {.worktrees/slot-N/repo_key/subdir/}
     Port: {port}
-    Logs: $WT logs {N} {service}
+    Logs: .claude/bin/wt logs {N} {service}
 
 ## Test URLs
 Your changes are served at these URLs (via nginx):
@@ -181,8 +184,8 @@ Instead:
 If your feature needs a NEW environment variable:
   1. Add it to the appropriate `.env.overrides` file in your worktree
   2. Restart the affected service:
-     $WT stop {N}
-     $WT start {N} --services {service}
+     .claude/bin/wt stop {N}
+     .claude/bin/wt start {N} --services {service}
   3. Do NOT modify .env files directly — they are overwritten on every restart
 
 ## Rules
@@ -216,8 +219,8 @@ When the agent completes:
 If `--keep` was specified, leave everything running and tell the user:
 ```
 Worktree slot {N} is still running. When done testing:
-  $WT stop {N}
-  $WT destroy {N}
+  .claude/bin/wt stop {N}
+  .claude/bin/wt destroy {N}
 ```
 
 If `--keep` was NOT specified, ask the user:
