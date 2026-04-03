@@ -1,0 +1,36 @@
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format main '$remote_addr [$time_local] "$request" '
+                    '$status $body_bytes_sent "$server_name"';
+
+    access_log /var/log/nginx/access.log main;
+    error_log  /var/log/nginx/error.log warn;
+
+    sendfile    on;
+    keepalive_timeout 65;
+
+    server {
+        listen {{nginx_port}} default_server;
+        server_name _;
+
+        location / {
+            default_type text/plain;
+            return 200 '{{project_name}} — Feature Worktree Router\n\nActive feature slots are served via subdomains.\nUse `make feature-status` to see active slots.\n';
+        }
+
+        location /health {
+            default_type text/plain;
+            return 200 'ok\n';
+        }
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+}
