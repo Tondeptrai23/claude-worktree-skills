@@ -41,8 +41,16 @@ func runInstall(c *cli.Context) error {
 	skillsDir := filepath.Join(claudeDir, "skills")
 	binDir := filepath.Join(claudeDir, "bin")
 
-	// 1. Extract skill files
+	// 1. Extract skill files (clean install — remove old files first)
 	fmt.Println("\033[32m[*]\033[0m Installing skills...")
+
+	// Remove previous skill directories so stale files don't linger
+	for _, dir := range []string{"worktree", "worktree-agent"} {
+		old := filepath.Join(skillsDir, dir)
+		if _, err := os.Stat(old); err == nil {
+			os.RemoveAll(old)
+		}
+	}
 
 	err = fs.WalkDir(SkillFiles, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -105,8 +113,6 @@ func runInstall(c *cli.Context) error {
 	// 4. Update .gitignore
 	gitignorePath := filepath.Join(projectRoot, ".gitignore")
 	ensureGitignore(gitignorePath, ".claude/bin/")
-	ensureGitignore(gitignorePath, ".claude/skills/worktree/")
-	ensureGitignore(gitignorePath, ".claude/skills/worktree-agent/")
 	ensureGitignore(gitignorePath, ".claude/worktree/")
 	ensureGitignore(gitignorePath, ".worktrees/")
 	ensureGitignore(gitignorePath, ".env.overrides")
@@ -179,18 +185,25 @@ func updateSettings(claudeDir string) error {
 }
 
 func ensureGitignore(path, pattern string) {
-	if data, err := os.ReadFile(path); err == nil {
+	data, err := os.ReadFile(path)
+	if err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.TrimSpace(line) == pattern {
 				return
 			}
 		}
 	}
+
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}
 	defer f.Close()
+
+	// Ensure a newline separator if the file doesn't end with one
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		fmt.Fprintln(f)
+	}
 	fmt.Fprintln(f, pattern)
 }
 
