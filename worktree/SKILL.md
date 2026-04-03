@@ -54,7 +54,7 @@ Use Explore agents to gather:
 4. **Ports** — read Vite configs, Spring Boot `application.yml`, uvicorn commands, docker-compose `ports:`, `.env.sample`
 5. **Environment variables** — which env vars reference other services, where `.env`/`.env.sample` live, which are browser-consumed (`VITE_*`, `NEXT_PUBLIC_*`, `REACT_APP_*`)
 6. **Infrastructure** — `docker-compose.yml` for databases, caches, auth servers
-7. **Start commands** — Makefile targets, `package.json` scripts, direct CLI commands
+7. **Start commands** — `package.json` scripts, direct CLI commands, docker-compose services
 8. **CORS** — search backend services for CORS config. See [references/cors-audit.md](references/cors-audit.md) for where to look per framework
 9. **Database migrations** — detect migration tools and write the `run` command. See [references/db-isolation.md](references/db-isolation.md)
 10. **Private files** — read each service's `.gitignore` (and root `.gitignore`) to find gitignored files that exist on disk (credentials, keys, certs). Common patterns: `*service-account*.json`, `*.pem`, `*.key`, `*.p12`, `*credentials*.json`, `*firebase*.json`
@@ -62,7 +62,9 @@ Use Explore agents to gather:
 
 ### Step 2: Present findings and resolve
 
-Present ALL findings in ONE `AskUserQuestion` call. Batch everything — don't ask multiple times:
+**IMPORTANT**: You MUST use the `AskUserQuestion` tool to present findings and ask questions. Do NOT use inline text — the user needs a structured prompt they can respond to. Batch ALL questions into a single `AskUserQuestion` call. Never ask multiple times.
+
+Example `AskUserQuestion` content:
 
 ```
 Here's what I found:
@@ -80,9 +82,6 @@ CORS:
 
 Database: Hibernate ddl-auto=update, no versioned migrations
   -> Recommending: schema isolation (separate schema per slot)
-
-Concerns:
-  - OAuth redirect URIs may need worktree origins added
 
 Private files found (gitignored but exist on disk):
   - be/firebase-service-account.json

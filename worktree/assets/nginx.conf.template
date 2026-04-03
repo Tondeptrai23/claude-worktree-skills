@@ -23,7 +23,7 @@ http {
 
         location / {
             default_type text/plain;
-            return 200 '{{project_name}} — Feature Worktree Router\n\nActive feature slots are served via subdomains.\nUse `make feature-status` to see active slots.\n';
+            return 200 '{{project_name}} — Feature Worktree Router\n\nActive feature slots are served via subdomains.\nUse `wt status` to see active slots.\n';
         }
 
         location /health {
