@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"claude-worktree-skill/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
 )
 
 // MergeEnv copies main .env (secrets) + applies .env.overrides for each service in the slot.

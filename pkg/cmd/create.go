@@ -8,13 +8,13 @@ import (
 	"regexp"
 	"strings"
 
-	"claude-worktree-skill/pkg/config"
-	"claude-worktree-skill/pkg/db"
-	"claude-worktree-skill/pkg/envgen"
-	gitops "claude-worktree-skill/pkg/git"
-	"claude-worktree-skill/pkg/nginx"
-	"claude-worktree-skill/pkg/slot"
-	"claude-worktree-skill/pkg/template"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/db"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/envgen"
+	gitops "github.com/Tondeptrai23/claude-worktree-skills/pkg/git"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/nginx"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/slot"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/template"
 
 	"github.com/urfave/cli/v2"
 )

@@ -10,9 +10,9 @@ import (
 	"regexp"
 	"time"
 
-	"claude-worktree-skill/pkg/config"
-	"claude-worktree-skill/pkg/platform"
-	"claude-worktree-skill/pkg/slot"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/platform"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/slot"
 )
 
 // Generate creates nginx configs for all active slots and the main nginx.conf.

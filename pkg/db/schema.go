@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"claude-worktree-skill/pkg/config"
-	"claude-worktree-skill/pkg/template"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/template"
 )
 
 // Setup creates the database isolation for a slot.

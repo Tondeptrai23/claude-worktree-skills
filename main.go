@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"claude-worktree-skill/pkg/cmd"
-	"claude-worktree-skill/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/cmd"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
 
 	"github.com/urfave/cli/v2"
 )

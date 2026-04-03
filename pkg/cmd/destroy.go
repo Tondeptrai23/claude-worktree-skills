@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"claude-worktree-skill/pkg/config"
-	"claude-worktree-skill/pkg/db"
-	gitops "claude-worktree-skill/pkg/git"
-	"claude-worktree-skill/pkg/nginx"
-	"claude-worktree-skill/pkg/process"
-	"claude-worktree-skill/pkg/slot"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/db"
+	gitops "github.com/Tondeptrai23/claude-worktree-skills/pkg/git"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/nginx"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/process"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/slot"
 
 	"github.com/urfave/cli/v2"
 )

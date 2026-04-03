@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"claude-worktree-skill/pkg/config"
-	"claude-worktree-skill/pkg/process"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/process"
 
 	"github.com/urfave/cli/v2"
 )

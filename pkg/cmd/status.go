@@ -7,10 +7,10 @@ import (
 
 	"path/filepath"
 
-	"claude-worktree-skill/pkg/config"
-	"claude-worktree-skill/pkg/process"
-	"claude-worktree-skill/pkg/slot"
-	"claude-worktree-skill/pkg/template"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/process"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/slot"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/template"
 
 	"github.com/urfave/cli/v2"
 )

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"claude-worktree-skill/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
 
 	"github.com/urfave/cli/v2"
 )

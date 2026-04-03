@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"claude-worktree-skill/pkg/config"
-	"claude-worktree-skill/pkg/template"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/template"
 )
 
 // GenerateOverrides writes .env.overrides files for each service in the slot.

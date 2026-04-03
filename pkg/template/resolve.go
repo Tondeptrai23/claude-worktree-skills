@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"claude-worktree-skill/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
 )
 
 var tmplRe = regexp.MustCompile(`\{\{([^}]+)\}\}`)
