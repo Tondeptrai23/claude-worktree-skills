@@ -26,7 +26,7 @@ branch_prefix: "feature/{name}"
 # These are gitignored files that services need to run (credentials, keys, certs, etc.).
 # Paths are relative to the project root. Supports globs.
 # Discovered during bootstrap by scanning .gitignore for secret file patterns.
-# Copied by merge-env.sh alongside .env files — agents never see these.
+# Copied by wt start alongside .env files — agents never see these.
 private_files:
   # - be/firebase-service-account.json
   # - be/service-account.json

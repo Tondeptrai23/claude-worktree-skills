@@ -35,94 +35,70 @@ Parse from the user's slash command:
 
 Before doing anything, verify:
 
-1. **Locate worktree config and scripts.** Search for `worktree.yml` and `feature-worktree.sh`:
+1. **Locate config.** Search for `worktree.yml`:
    - Check `.claude/worktree/worktree.yml` (standard location)
-   - Check project root `worktree.yml` (legacy)
-   - Find `feature-worktree.sh` via: `find . -name feature-worktree.sh -not -path '*/.worktrees/*' | head -1`
-   - If neither found: tell user "Run `/worktree bootstrap` first." and stop.
-   - Store the script path as `$SCRIPTS_DIR` for all subsequent commands.
+   - Check project root `worktree.yml`
+   - If not found: tell user "Run `/worktree bootstrap` first." and stop.
 
-2. **Read `worktree.yml`** to get: `max_slots`, service definitions, port scheme, DB isolation mode, branch prefix.
+2. **Verify `wt` CLI exists** at `.claude/bin/wt`. If not, tell user to run the install script.
 
-3. **Slot allocation** — if `--slot` not specified, find the first free slot:
+3. **Read `worktree.yml`** to get: `max_slots`, service definitions, port scheme, DB isolation mode, branch prefix, nginx subdomain pattern.
+
+4. **Slot allocation** — if `--slot` not specified, find the first free slot:
    ```bash
    for n in $(seq 1 $MAX_SLOTS); do
        [[ ! -d .worktrees/slot-${n} ]] && echo "$n" && break
    done
    ```
-   If all slots are occupied, tell the user which slots exist and ask them to destroy one.
+   If all slots are occupied, run `.claude/bin/wt status` and ask user to destroy one.
 
-4. **Quick health checks** (fail fast, don't waste time creating a worktree that can't start):
+5. **Quick health checks** (fail fast):
    - Disk space: `df --output=avail . | tail -1` — warn if < 5GB
-   - Port conflicts: for each service in the slot, check if the port is already in use:
-     ```bash
-     lsof -i :PORT -sTCP:LISTEN 2>/dev/null
-     ```
-     If occupied, report which process and suggest a different slot.
-   - Infrastructure: if `database.isolation` is `schema` or `none`, check the DB is reachable:
-     ```bash
-     pg_isready -h HOST -p PORT 2>/dev/null
-     ```
+   - Port conflicts: for each service in the slot, check if the port is already in use
    - Branch: check if the branch is already checked out in another worktree:
      ```bash
      git -C SERVICE_DIR worktree list | grep BRANCH
      ```
+   - Docker: `docker info >/dev/null 2>&1` — required if DB containers or nginx are used
 
-5. **Staleness check** — compare `.env.sample` mtime against `worktree.yml` mtime. If any .env.sample is newer, warn: "Environment config may have changed since bootstrap. Consider re-running `/worktree bootstrap`."
+6. **Staleness check** — compare `.env.sample` mtime against `worktree.yml` mtime. If any .env.sample is newer, warn about re-running bootstrap.
 
-6. **`.env` file access** — the create script copies `.env` files from the main checkout into the worktree. Verify access:
-   ```bash
-   # Check that .env files exist and are readable for each service
-   for svc_dir in be fe/app fe/presentation fe/admin genai; do
-       [[ -f "$svc_dir/.env" ]] || [[ -f "$svc_dir/.env.sample" ]] || echo "WARN: no .env for $svc_dir"
-   done
-   ```
-   If `.env` files are missing (only `.env.sample` exists), the script will fall back to `.env.sample` — but the resulting worktree will have placeholder/empty values for secrets (API keys, etc.). In that case, warn the user:
-   "Service {X} has no `.env` file (only `.env.sample`). The worktree will use sample values — API keys, secrets, and credentials will be empty. The agent can implement code but services requiring real credentials won't function."
+7. **`.env` file access** — check that `.env` or `.env.sample` exists for each service. Warn if only `.env.sample` exists (secrets will be empty).
 
-7. **Docker running** — `docker info >/dev/null 2>&1`. Required if `database.isolation: database` or nginx is used.
-
-8. **Nginx running** (if enabled) — `docker ps | grep feature-router`. If not running, suggest: `make feature-nginx-start`
-
-If any critical check fails, report the issue and stop. Do NOT proceed with a broken setup.
-
-**Note**: Tool versions, platform compatibility, and DNS resolution are validated during `/worktree bootstrap`. If the user hits those issues here, tell them to re-run `/worktree bootstrap` which includes comprehensive pre-flight checks.
+If any critical check fails, report the issue and stop.
 
 ### Step 1: Create the worktree
 
-Run the project's `feature-worktree.sh create` script. Pass `--services` to only create the services needed for the task:
-
 ```bash
-$SCRIPTS_DIR/feature-worktree.sh create $SLOT $FEATURE_NAME --services $SERVICES
+.claude/bin/wt create $SLOT $FEATURE_NAME --services $SERVICES
 ```
 
-This handles: git worktree creation, env overrides, dependency install, DB schema (if backend is included), nginx config. Only creates worktrees for the specified services — saves disk and time.
+This handles: git worktree creation, env overrides, dependency install, DB setup + seed + migrations, nginx config regeneration.
 
-If the script fails, report the error and clean up.
+If the command fails, report the error and clean up.
 
 ### Step 2: Start services
 
 ```bash
-$SCRIPTS_DIR/feature-worktree.sh start $SLOT --services $SERVICES
+.claude/bin/wt start $SLOT --services $SERVICES
 ```
 
-This auto-starts nginx if not running, merges env files (secrets + overrides), then launches the services.
+This auto-starts nginx if not running (finding an available port if needed), merges env files (secrets + overrides), then launches the services.
 
 ### Step 3: Wait for services to be healthy
 
-For each started service, poll its health endpoint (or just check the port is listening):
+For each started service, poll its health endpoint (or check the port is listening):
 
 ```bash
 for attempt in $(seq 1 30); do
     curl -sf http://localhost:$PORT/health > /dev/null 2>&1 && break
-    # or: lsof -i :$PORT -sTCP:LISTEN > /dev/null 2>&1 && break
     sleep 2
 done
 ```
 
 If a service doesn't come up within 60 seconds, check its log:
 ```bash
-tail -20 .worktrees/slot-$SLOT/.logs/$SERVICE.log
+.claude/bin/wt logs $SLOT $SERVICE
 ```
 Report the error and ask the user how to proceed.
 
@@ -130,7 +106,7 @@ Report the error and ask the user how to proceed.
 
 Use the Agent tool to spawn an agent. **Do NOT use `isolation: "worktree"`** — we already set up the worktree with full infrastructure. Instead, spawn a regular agent that works in the worktree directory.
 
-Read `worktree.yml` to build the test URLs for the agent prompt. The nginx subdomain pattern tells you the URLs.
+Read `worktree.yml` to build the test URLs for the agent prompt. The nginx subdomain pattern tells you the URLs (default: `{name}.{svc}.localhost`).
 
 **Agent prompt structure:**
 
@@ -148,12 +124,12 @@ Each service has its own subdirectory:
 {for each service in slot:}
   - {service}: {.worktrees/slot-N/repo_key/subdir/}
     Port: {port}
-    Logs: .worktrees/slot-N/.logs/{service}.log
+    Logs: .claude/bin/wt logs {N} {service}
 
 ## Test URLs
 Your changes are served at these URLs (via nginx):
 {for each exposed service:}
-  - {service}: {subdomain URL}
+  - {service}: http://{name}.{svc}.localhost:{nginx_port}
 
 Direct ports (bypass nginx):
 {for each service:}
@@ -161,8 +137,7 @@ Direct ports (bypass nginx):
 
 ## Database
 {if isolation == "schema":}
-  Schema: feature_{slot} (isolated from other slots)
-  Connection: {jdbc/sqlalchemy URL}
+  Schema: {schema_prefix}{slot} (isolated from other slots)
 {elif isolation == "database":}
   Dedicated DB container on port {db_port}
 {else:}
@@ -173,8 +148,7 @@ Direct ports (bypass nginx):
 2. Services auto-reload on file changes (Vite HMR, Spring DevTools, uvicorn --reload)
 3. Test via the URLs above
 4. Use `curl` to verify API endpoints
-5. Run the project's test suite if applicable:
-   {test commands from worktree.yml}
+5. Run the project's test suite if applicable
 
 ## Environment Files
 Services load .env files that are auto-generated at start time (secrets from main checkout + port overrides merged together). You should NEVER read .env files directly.
@@ -185,20 +159,17 @@ Instead:
 
 If your feature needs a NEW environment variable:
   1. Add it to the appropriate `.env.overrides` file in your worktree
-     (e.g., {project_root}/.worktrees/slot-{N}/be/.env.overrides)
-  2. Restart the affected service to re-merge:
-     {project_root}/$SCRIPTS_DIR/feature-worktree.sh stop {N}
-     {project_root}/$SCRIPTS_DIR/feature-worktree.sh start {N} --services {service}
-     (merge-env.sh re-applies your .env.overrides on top of secrets automatically)
+  2. Restart the affected service:
+     .claude/bin/wt stop {N}
+     .claude/bin/wt start {N} --services {service}
   3. Do NOT modify .env files directly — they are overwritten on every restart
 
 ## Rules
-- Only modify files within your working directory ({project_root}/.worktrees/slot-{N}/)
-- Do NOT modify scripts/, nginx/, or files in the main checkout
+- Only modify files within your working directory
+- Do NOT modify files in the main checkout
 - Read `.env.sample` and `.env.overrides` — do NOT read `.env` (contains secrets)
 - Do NOT stop or restart services unless adding new env vars (they auto-reload on code changes)
-- If a service crashes, check its log file and fix the code
-- Do NOT commit `.env.overrides` files — they are slot-specific
+- If a service crashes, check its log and fix the code
 - Commit your changes to the feature branch when done
 ```
 
@@ -213,20 +184,15 @@ When the agent completes:
    ```bash
    git -C .worktrees/slot-$SLOT/$REPO diff
    ```
-3. Show test URLs for manual verification:
-   ```
-   Your feature is running at:
-     http://f{slot}.localhost
-     http://f{slot}-api.localhost
-   ```
+3. Show test URLs for manual verification
 
 ### Step 6: Cleanup decision
 
 If `--keep` was specified, leave everything running and tell the user:
 ```
 Worktree slot {N} is still running. When done testing:
-  make feature-stop SLOT={N}
-  make feature-destroy SLOT={N}
+  .claude/bin/wt stop {N}
+  .claude/bin/wt destroy {N}
 ```
 
 If `--keep` was NOT specified, ask the user:
@@ -256,33 +222,18 @@ You can also detect this intent when the user says something like "implement the
 
 1. Parse the features from the user's message
 2. Allocate slots 1, 2, 3
-3. Create all worktrees (can be sequential — fast)
+3. Create all worktrees sequentially (fast)
 4. Start all services (can be parallel)
-5. Spawn all agents with `run_in_background: true` in a single message (multiple Agent tool calls)
+5. Spawn all agents with `run_in_background: true` in a single message
 6. As each agent completes, report its results
 
 ### Background Agent Completion
 
 When a background agent finishes, you will be automatically notified. On notification:
 
-1. **Immediately report to the user** — don't wait for them to ask:
-   ```
-   Background agent for slot {N} ("{feature}") has completed.
-
-   Summary: {agent's output summary}
-
-   Diff: {number of files changed, insertions, deletions}
-
-   Test URLs (still running):
-     http://f{N}.localhost
-     http://f{N}-api.localhost
-
-   Run `make feature-status` to see all slots.
-   ```
-
+1. **Immediately report to the user** — don't wait for them to ask
 2. **Do NOT auto-destroy** — the user may want to manually test. Background agents always imply `--keep`.
-
-3. If multiple background agents complete around the same time, batch the notifications into one message.
+3. If multiple background agents complete around the same time, batch the notifications.
 
 ---
 
@@ -291,42 +242,21 @@ When a background agent finishes, you will be automatically notified. On notific
 | Error | Action |
 |-------|--------|
 | `worktree.yml` not found | Tell user to run `/worktree bootstrap` |
-| All slots occupied | Show `feature-status`, ask user to destroy one |
+| `wt` CLI not found | Tell user to run the install script |
+| All slots occupied | Run `wt status`, ask user to destroy one |
 | Port conflict | Report which process, suggest different slot |
-| Service fails to start | Show last 20 lines of log, ask user |
+| Service fails to start | Show log via `wt logs`, ask user |
 | Agent fails | Show error, keep worktree for debugging |
 | Disk space < 5GB | Warn but allow user to proceed |
 | Branch already in worktree | Report which slot has it, offer to reuse |
 
 ---
 
-## Related Skills
-
-- **`/worktree`** — Run `/worktree bootstrap` first to analyze the project, audit CORS + DB migrations, and generate `worktree.yml` + scripts. This skill requires that setup to exist.
-
----
-
-## Fallback: Scripts Exist But No `worktree.yml`
-
-If `$SCRIPTS_DIR/feature-worktree.sh` exists but `worktree.yml` doesn't, the project was set up with hardcoded scripts (before the skill system). In this case:
-
-1. **Do NOT fail** — the scripts still work.
-2. Run the scripts directly instead of reading config:
-   - `$SCRIPTS_DIR/feature-worktree.sh status` → discover existing slots and ports
-   - `$SCRIPTS_DIR/feature-worktree.sh create $SLOT $NAME` → create worktree
-   - `$SCRIPTS_DIR/feature-worktree.sh start $SLOT` → start services
-3. Read `.worktrees/slot-$N/.slot-meta` for port numbers and branch info.
-4. Read `nginx/conf.d/slot-$N.conf` for subdomain URLs.
-5. Construct the agent prompt from these sources.
-6. **Suggest** the user runs `/worktree bootstrap` to generate `worktree.yml` for a better experience next time.
-
----
-
 ## Important Notes
 
 - **This skill replaces `isolation: "worktree"`** for feature development. The built-in worktree isolation only creates a git checkout — no ports, no services, no testing. This skill provides the full environment.
-- **Always read `worktree.yml`** before doing anything. All port numbers, service names, URLs, and commands come from there. If `worktree.yml` is missing, fall back to reading scripts + `.slot-meta` (see Fallback section).
-- **Do NOT hardcode any project-specific values** in the agent prompt. Everything comes from the config or `.slot-meta`.
+- **Always read `worktree.yml`** before doing anything. All port numbers, service names, URLs, and commands come from there.
+- **Do NOT hardcode any project-specific values** in the agent prompt. Everything comes from the config.
 - **Services auto-reload** — Vite HMR, Spring DevTools, uvicorn `--reload`. The agent should NOT restart services after code changes.
-- **The agent works in the worktree directory**, not the project root. File paths in the agent prompt must be absolute or relative to the worktree.
-- **Background agents imply `--keep`** — never auto-destroy a worktree from a background agent. The user must explicitly destroy it.
+- **The agent works in the worktree directory**, not the project root.
+- **Background agents imply `--keep`** — never auto-destroy a worktree from a background agent.

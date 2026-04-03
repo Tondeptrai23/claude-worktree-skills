@@ -3,13 +3,10 @@ package platform
 import "runtime"
 
 // ProxyHost returns the hostname nginx should use for proxy_pass.
-// Linux with network_mode: host can reach localhost directly.
-// macOS Docker Desktop needs host.docker.internal.
+// With ports mapping (not network_mode: host), the container uses
+// host.docker.internal to reach services on the host.
 func ProxyHost() string {
-	if runtime.GOOS == "darwin" {
-		return "host.docker.internal"
-	}
-	return "localhost"
+	return "host.docker.internal"
 }
 
 // IsMacOS returns true if running on macOS.

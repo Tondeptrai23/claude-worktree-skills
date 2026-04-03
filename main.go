@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"log"
 	"os"
@@ -13,12 +14,19 @@ import (
 
 var version = "dev"
 
+//go:embed worktree worktree-agent
+var embeddedSkills embed.FS
+
 func main() {
+	// Make embedded skills available to the install command
+	cmd.SkillFiles = embeddedSkills
+
 	app := &cli.App{
 		Name:    "wt",
 		Usage:   "Multi-feature worktree management",
 		Version: version,
 		Commands: []*cli.Command{
+			cmd.InstallCommand(),
 			cmd.CreateCommand(),
 			cmd.StartCommand(),
 			cmd.StopCommand(),
@@ -27,8 +35,12 @@ func main() {
 			cmd.LogsCommand(),
 		},
 		Before: func(c *cli.Context) error {
-			// Skip config loading for help/version
+			// Skip config loading for help/version/install
 			if c.NArg() == 0 {
+				return nil
+			}
+			subCmd := c.Args().Get(0)
+			if subCmd == "install" || subCmd == "help" {
 				return nil
 			}
 

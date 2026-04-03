@@ -1,54 +1,59 @@
 # Integrating Worktrees Into Other Skills
 
-The worktree system exposes a CLI interface via bash scripts. Any skill or workflow can use these as building blocks — no dependency on the `/worktree` or `/worktree-agent` skills.
+The worktree system exposes a CLI interface via the `wt` binary (`.claude/bin/wt`). Any skill or workflow can use these commands as building blocks — no dependency on the `/worktree` or `/worktree-agent` skills.
 
-## Script API
+## CLI API
 
-Scripts are in the project's scripts directory (locate by checking `worktree.yml` or searching for `feature-worktree.sh`). They require `worktree.yml` to exist (run `/worktree bootstrap` once).
-
-### feature-worktree.sh
+The `wt` CLI reads `worktree.yml` for all configuration. Run `/worktree bootstrap` once to generate the config.
 
 ```bash
 # Create a worktree slot (only specified services, or all by default)
-scripts/feature-worktree.sh create <slot> <name> [--services svc1,svc2] [--<svc>-branch <branch>]
+.claude/bin/wt create <slot> <name> [--services svc1,svc2] [--<svc>-branch <branch>]
 
 # Start services (auto-starts nginx, merges .env + .env.overrides)
-scripts/feature-worktree.sh start <slot> [--services svc1,svc2]
+.claude/bin/wt start <slot> [--services svc1,svc2]
 
 # Stop services
-scripts/feature-worktree.sh stop <slot>
+.claude/bin/wt stop <slot>
 
-# Destroy slot (remove worktree, optionally drop DB schema)
-scripts/feature-worktree.sh destroy <slot> [--drop-schema]
+# Destroy slot (remove worktree, optionally teardown DB)
+.claude/bin/wt destroy <slot> [--teardown-db]
 
 # Show all active slots
-scripts/feature-worktree.sh status
+.claude/bin/wt status
+
+# View logs
+.claude/bin/wt logs <slot> [service]
 ```
 
 Key behaviors:
-- `create --services fe` only creates fe/ worktree, skips be/ and genai/ entirely (no git worktree, no env overrides, no dep install). Skips DB schema creation if no backend service is in the slot.
-- `start` auto-starts nginx if not running. Runs `merge-env.sh` (copies main .env secrets + applies .env.overrides) before launching services.
+- `create --services fe` only creates fe/ worktree, skips other services entirely. Skips DB setup if no backend service is in the slot.
+- `create` automatically installs deps, runs DB setup + seed + migrations, and regenerates nginx.
+- `start` auto-starts nginx if not running (finds available port if default is occupied). Merges env files (copies main .env secrets + applies .env.overrides) before launching services.
 - `start --services fe` only starts fe services (but still merges env for all services in the slot).
+- Feature names are sanitized for DNS: `TICKET-123` -> `ticket-123.be.localhost`.
 
 ### Slot metadata
 
-After creation, `.worktrees/slot-{N}/.slot-meta` contains:
-```bash
-SLOT=1
-FEATURE_NAME=my-feature
-BE_PORT=8180
-FE_APP_PORT=5273
-# ... etc
+After creation, `.worktrees/slot-{N}/.slot-meta.yml` contains:
+```yaml
+slot: 1
+feature_name: my-feature
+mode: dev
+services:
+  be:
+    branch: feature/my-feature
+    port: 8180
+    repo_key: be
 ```
-
-Source this file to get port numbers and branch names for your workflow.
 
 ### Nginx subdomains
 
-Read `nginx/conf.d/slot-{N}.conf` or derive from `worktree.yml`:
-- `http://f{N}.localhost` — frontend
-- `http://f{N}-api.localhost` — backend API
-- Pattern: configured in `worktree.yml` under `nginx.subdomains`
+Default pattern: `{name}.{svc}.localhost` (configurable in `worktree.yml`).
+
+Example for `wt create 1 ticket-123`:
+- `http://ticket-123.be.localhost` — backend API
+- `http://ticket-123.fe.localhost` — frontend
 
 ## Integration Pattern
 
@@ -63,11 +68,10 @@ test URLs without affecting the main checkout.
 
 ### Setup (before implementing)
 1. Find a free slot: `ls .worktrees/` to see which slots are taken (1-3)
-2. Create: `scripts/feature-worktree.sh create $SLOT $FEATURE_NAME --services $SERVICES`
-3. Start: `scripts/feature-worktree.sh start $SLOT`
+2. Create: `.claude/bin/wt create $SLOT $FEATURE_NAME --services $SERVICES`
+3. Start: `.claude/bin/wt start $SLOT`
    (nginx and env merge happen automatically)
-4. Read `.worktrees/slot-$SLOT/.slot-meta` for ports and URLs
-5. Work inside `.worktrees/slot-$SLOT/` directory
+4. Work inside `.worktrees/slot-$SLOT/` directory
 
 ### Your existing workflow runs here
 - Implement, test, lint — all inside the worktree directory
@@ -75,17 +79,17 @@ test URLs without affecting the main checkout.
 - Test via nginx URLs or direct localhost:port
 
 ### Teardown (after PR is created)
-6. Stop: `scripts/feature-worktree.sh stop $SLOT`
-7. Destroy: `scripts/feature-worktree.sh destroy $SLOT`
+5. Stop: `.claude/bin/wt stop $SLOT`
+6. Destroy: `.claude/bin/wt destroy $SLOT`
 ```
 
 ## Environment Files
 
 - `.env.overrides` — safe to read/edit (ports and URLs only)
 - `.env.sample` — safe to read (variable names and descriptions)
-- `.env` — DO NOT read (contains secrets, regenerated each `start` by `merge-env.sh`)
+- `.env` — DO NOT read (contains secrets, regenerated each `start`)
 
-If your workflow needs to add a new env var, write it to `.env.overrides` and restart the affected service. The restart re-runs `merge-env.sh` which applies your new override on top of secrets.
+If your workflow needs to add a new env var, write it to `.env.overrides` and restart the affected service. The restart re-merges your override on top of secrets.
 
 ## Example: Adding to a /implement Skill
 

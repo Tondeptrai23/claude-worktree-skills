@@ -12,14 +12,16 @@ Manage parallel feature development using git worktrees with isolated ports and 
 
 | Intent | Trigger | Action |
 |--------|---------|--------|
-| **Bootstrap** | `/worktree`, `/worktree bootstrap` | Analyze project, generate `worktree.yml` + scripts |
-| **Create** | `/worktree create <slot> <name>` | Create worktree slot |
-| **Start** | `/worktree start <slot>` | Start services in slot |
-| **Stop** | `/worktree stop <slot>` | Stop services |
-| **Destroy** | `/worktree destroy <slot>` | Remove worktree slot |
-| **Status** | `/worktree status` | Show all active slots |
+| **Bootstrap** | `/worktree`, `/worktree bootstrap` | Analyze project, generate `worktree.yml` + nginx scaffolding |
+| **Create** | `/worktree create <slot> <name>` | `wt create <slot> <name>` |
+| **Start** | `/worktree start <slot>` | `wt start <slot>` |
+| **Stop** | `/worktree stop <slot>` | `wt stop <slot>` |
+| **Destroy** | `/worktree destroy <slot>` | `wt destroy <slot>` |
+| **Status** | `/worktree status` | `wt status` |
 
 If `worktree.yml` doesn't exist and the user requests a non-bootstrap operation, run bootstrap first. If it already exists and user runs bootstrap, ask whether to overwrite.
+
+The `wt` CLI is installed at `.claude/bin/wt`. All slot operations go through it — no shell scripts needed.
 
 ---
 
@@ -33,14 +35,14 @@ grep -qE '^doctor:|^check-deps:' Makefile 2>/dev/null && make doctor
 ```
 
 Otherwise, run `--version` checks for detected tools:
-- Always: `git --version`, `docker --version`, `docker compose version`, `bash --version`
+- Always: `git --version`, `docker --version`, `docker compose version`
 - If `build.gradle`/`pom.xml` found: `java --version`
 - If `package.json` found: `node --version` + package manager (`pnpm`/`yarn`/`npm`)
 - If `requirements.txt`/`pyproject.toml` found: `python3 --version`
 
 Check that each service directory has `.git`. If missing, tell user to clone repos first.
 
-If a critical tool is missing, stop. Otherwise proceed.
+Verify `wt` CLI exists at `.claude/bin/wt`. If not, tell user to run the install script first.
 
 ### Step 1: Analyze the project
 
@@ -54,8 +56,9 @@ Use Explore agents to gather:
 6. **Infrastructure** — `docker-compose.yml` for databases, caches, auth servers
 7. **Start commands** — Makefile targets, `package.json` scripts, direct CLI commands
 8. **CORS** — search backend services for CORS config. See [references/cors-audit.md](references/cors-audit.md) for where to look per framework
-9. **Database migrations** — detect Flyway, Alembic, Prisma, Django migrations, Hibernate ddl-auto. See [references/db-isolation.md](references/db-isolation.md)
-10. **Private files** — read each service's `.gitignore` (and root `.gitignore`) to find gitignored files that exist on disk (credentials, keys, certs). Common patterns: `*service-account*.json`, `*.pem`, `*.key`, `*.p12`, `*credentials*.json`, `*firebase*.json`. List any matches found — these need to be copied to worktrees at start time.
+9. **Database migrations** — detect migration tools and write the `run` command. See [references/db-isolation.md](references/db-isolation.md)
+10. **Private files** — read each service's `.gitignore` (and root `.gitignore`) to find gitignored files that exist on disk (credentials, keys, certs). Common patterns: `*service-account*.json`, `*.pem`, `*.key`, `*.p12`, `*credentials*.json`, `*firebase*.json`
+11. **Existing project skills** — scan `.claude/skills/` for workflow skills (plan, implement, test, commit, create-mr, etc.) to document in `worktree.yml`
 
 ### Step 2: Present findings and resolve
 
@@ -65,18 +68,18 @@ Present ALL findings in ONE `AskUserQuestion` call. Batch everything — don't a
 Here's what I found:
 
 Services:
-  - api/ (Spring Boot, port 8080) — git repo ✓
-  - web/ (Vite + React, port 3000) — git repo ✓
-  - worker/ (FastAPI, port 8081) — git repo ✓
+  - api/ (Spring Boot, port 8080) — git repo Y
+  - web/ (Vite + React, port 3000) — git repo Y
+  - worker/ (FastAPI, port 8081) — git repo Y
 
 Git topology: multi-repo (each service has own .git)
 
 CORS:
-  - api/: env-driven (ALLOWED_ORIGINS) — will auto-configure ✓
-  - worker/: env-driven (ALLOWED_ORIGINS) — will auto-configure ✓
+  - api/: env-driven (ALLOWED_ORIGINS) — will auto-configure Y
+  - worker/: env-driven (ALLOWED_ORIGINS) — will auto-configure Y
 
 Database: Hibernate ddl-auto=update, no versioned migrations
-  → Recommending: schema isolation (separate schema per slot)
+  -> Recommending: schema isolation (separate schema per slot)
 
 Concerns:
   - OAuth redirect URIs may need worktree origins added
@@ -90,13 +93,10 @@ Questions:
   2. Dev mode (host processes) or Docker mode?
   3. Schema isolation OK, or prefer separate DB containers?
   4. What branch naming convention do you use?
-     Examples: feature/{name}, {name}, JIRA-{ticket}-{name}, BIZ-{ticket}-{name}
+     Examples: feature/{name}, {name}, JIRA-{ticket}-{name}
      (default: feature/{name})
   5. Should I copy the private files listed above to worktrees?
-     (They'll be copied at start time alongside .env — agents won't see them)
 ```
-
-The branch prefix is stored in `worktree.yml` as `branch_prefix` and used as the default when `--*-branch` is not explicitly passed to `create`. For Jira-based workflows, the slot name typically IS the ticket number (e.g., `make feature-create SLOT=1 NAME=BIZ-123`).
 
 **You CAN infer** (don't ask): framework defaults (Spring Boot=8080, Vite=5173), common env patterns (`DATABASE_URL`, `API_URL`), git topology, browser-consumed env vars.
 
@@ -104,76 +104,66 @@ The branch prefix is stored in `worktree.yml` as `branch_prefix` and used as the
 
 ### Step 3: Generate `worktree.yml`
 
-Write the config to the project root. See [references/worktree-schema.md](references/worktree-schema.md) for the full schema.
+Write the config to the project root (or `.claude/worktree/worktree.yml`). See [references/worktree-schema.md](references/worktree-schema.md) for the full schema.
 
 Key things to encode:
-- `env_overrides` per service with `# browser` comments for browser-consumed URLs
-- `cors` section documenting audit results
-- `database.migrations` per service
-- `nginx.subdomains` mapping
+- `env_overrides` per service with templates (`{{self.port}}`, `{{svc.url}}`, `{{db.schema}}`)
+- `database.setup` / `database.teardown` commands for schema isolation
+- `database.image`, `container_port`, `env`, `readiness` for container isolation
+- `database.migrations` per service with the `run` command
+- `nginx.subdomain_pattern` — default: `{name}.{svc}.localhost`
 
-### Step 4: Generate scripts
+### Step 4: Scaffold nginx
 
-All generated files go in `.claude/worktree/` — this is personal dev tooling, not shared project code. It's gitignored and regenerable via `/worktree bootstrap`.
-
-Check if `.claude/worktree/scripts/feature-worktree.sh` already exists. If it does, skip — just regenerate `worktree.yml`. Only generate scripts for fresh bootstraps.
-
-Use [assets/](assets/) as templates. Replace `REPLACE` marker blocks with values from config:
+Generate nginx config files from templates in [assets/](assets/):
 
 ```
-.claude/worktree/
-├── worktree.yml
-├── scripts/
-│   ├── feature-worktree.sh
-│   ├── generate-env.sh
-│   ├── merge-env.sh
-│   └── nginx-gen.sh
-└── nginx/
-    ├── nginx.conf
-    ├── docker-compose.nginx.yml
-    └── conf.d/
+.claude/worktree/nginx/
+  nginx.conf                    # from nginx.conf.template (replace {{nginx_port}}, {{project_name}})
+  docker-compose.nginx.yml      # from docker-compose.nginx.yml.template (replace {{nginx_port}}, {{project_name}})
+  conf.d/                       # empty dir — wt generates slot configs here
 ```
 
-Then add to `.gitignore`: `.worktrees/`, `.env.overrides`, `.claude/worktree/`
-
-**Ask the user**: "Do you want `feature-*` targets added to your Makefile? This modifies a shared project file. If no, you can run scripts directly via `.claude/worktree/scripts/feature-worktree.sh`."
-
-If yes, add Makefile targets that delegate to `.claude/worktree/scripts/`. If no, skip — the scripts work standalone.
+Then add to `.gitignore`: `.worktrees/`, `.env.overrides`
 
 For URL resolution in env_overrides, see [references/url-resolution.md](references/url-resolution.md).
 For database isolation implementation, see [references/db-isolation.md](references/db-isolation.md).
-
-macOS: use `ports: ["80:80"]` instead of `network_mode: host` for nginx. Use awk instead of sed for .env manipulation.
 
 ---
 
 ## Slot Operations
 
-Run the generated scripts directly or via Makefile targets (if user opted in):
+All operations use the `wt` CLI:
 
 ```bash
-# Direct (always works)
-.claude/worktree/scripts/feature-worktree.sh create <slot> <name> [--services svc1,svc2] [--<svc>-branch <branch>]
-.claude/worktree/scripts/feature-worktree.sh start <slot> [--services svc1,svc2]
-.claude/worktree/scripts/feature-worktree.sh stop <slot>
-.claude/worktree/scripts/feature-worktree.sh destroy <slot> [--drop-schema]
-.claude/worktree/scripts/feature-worktree.sh status
+# Create a worktree slot
+.claude/bin/wt create <slot> <name> [--services svc1,svc2] [--<svc>-branch <branch>]
 
-# Via Makefile (if targets were added)
-make feature-create SLOT=1 NAME=my-feature SERVICES=be,fe
-make feature-start SLOT=1
+# Start services
+.claude/bin/wt start <slot> [--services svc1,svc2]
+
+# Stop services
+.claude/bin/wt stop <slot>
+
+# Destroy slot
+.claude/bin/wt destroy <slot> [--teardown-db]
+
+# Show status
+.claude/bin/wt status [slot]
+
+# View logs
+.claude/bin/wt logs <slot> [service]
 ```
 
-`--services` on both `create` and `start` controls which services are affected (default: all).
-
-Key behaviors the generated scripts must implement:
-- **`create --services`**: only creates git worktrees, env overrides, and installs deps for specified services. Skips DB schema creation if no backend service is in the slot.
-- **`start`**: auto-starts nginx if not running. Runs `merge-env.sh` before launching services.
-- **`start --services`**: only starts specified services (but still merges env for all services in the slot).
+Key behaviors:
+- **`create`**: creates git worktrees, generates env overrides, installs deps, runs DB setup + seed + migrations, regenerates nginx
+- **`create --services`**: only creates worktrees for specified services
+- **`start`**: auto-starts nginx if not running (finds available port if default is occupied), merges env files, launches services
+- **`destroy --teardown-db`**: also runs DB teardown (removes container or drops schema)
 
 **Shared repo constraint**: if multiple services share a repo (e.g., fe-app and fe-admin in `./fe`), they share one branch per worktree. Warn if user requests different branches for services in the same repo.
 
-See [references/integration.md](references/integration.md) for how other skills/workflows can use these scripts.
+See [references/integration.md](references/integration.md) for how other skills/workflows can use these commands.
 
 ---
 
@@ -183,17 +173,9 @@ See [references/integration.md](references/integration.md) for how other skills/
 
 ## Notes
 
-- All generated files live in `.claude/worktree/` — personal dev tooling, gitignored, regenerable via `/worktree bootstrap`
+- All generated config lives in `.claude/worktree/` — personal dev tooling, gitignored, regenerable via `/worktree bootstrap`
 - `.worktrees/` (runtime state) lives at project root, also gitignored
-- Makefile targets are optional — user chooses during bootstrap whether to modify the shared Makefile
-- Scripts require bash 4.2+ (macOS: `brew install bash`, Windows: use WSL/Git Bash)
-- Templates use `REPLACE` markers, not a template engine — Claude fills in real values
-- `.env.overrides` = ports/URLs only (safe for agents). `.env` and `private_files` = secrets (generated/copied at start time by `merge-env.sh`, agents should not read)
+- The `wt` CLI reads `worktree.yml` for all configuration — no hardcoded values
+- `.env.overrides` = ports/URLs only (safe for agents). `.env` and `private_files` = secrets (merged at start time, agents should not read)
+- Feature names are sanitized for DNS: `TICKET-123` -> `ticket-123.be.localhost`
 - Max 3 slots by default, configurable in `worktree.yml`
-
-### Platform support
-
-Scripts use POSIX-compatible commands (`date '+%Y...'`, `df -k`, `awk`). Platform-specific handling:
-- **Linux**: `network_mode: host` for nginx, `proxy_pass http://localhost:...`
-- **macOS**: `ports: ["80:80"]` for nginx, `proxy_pass http://host.docker.internal:...`, bash 4.2+ via brew
-- **Windows**: requires WSL or Git Bash. Docker Desktop with WSL2 backend recommended

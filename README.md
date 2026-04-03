@@ -25,20 +25,21 @@ Creates worktree, starts services, provides nginx-routed test URLs (`http://f1.l
 
 ## Installation
 
-Run from your project root:
+From your project root:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Tondeptrai23/claude-worktree-skills/main/install.sh | bash
+go run github.com/Tondeptrai23/claude-worktree-skills@latest install
 ```
 
-Or clone and run locally:
+Or clone and install locally:
 
 ```bash
 git clone https://github.com/Tondeptrai23/claude-worktree-skills.git /tmp/claude-worktree-skills
-/tmp/claude-worktree-skills/install.sh
+cd /your/project
+go run /tmp/claude-worktree-skills install
 ```
 
-This installs skills to `.claude/skills/`, builds the `wt` CLI to `.claude/bin/`, and updates `.gitignore`.
+This installs skills to `.claude/skills/`, copies the `wt` CLI to `.claude/bin/`, updates `settings.local.json` with permissions, and updates `.gitignore`.
 
 ## How It Works
 
@@ -63,7 +64,7 @@ Each slot gets ports offset by 100 from the base:
 
 ## Requirements
 
-- bash 4.2+ (macOS: `brew install bash`)
+- Go 1.23+ (to build the `wt` CLI)
 - git, docker, docker compose
 - Project-specific: node/pnpm, java, python, etc.
 
@@ -72,11 +73,7 @@ Each slot gets ports offset by 100 from the base:
 ```
 worktree/
 ├── SKILL.md                    # Bootstrap skill
-├── assets/                     # Script templates
-│   ├── feature-worktree.sh.template
-│   ├── generate-env.sh.template
-│   ├── merge-env.sh.template
-│   ├── nginx-gen.sh.template
+├── assets/                     # Nginx scaffolding templates
 │   ├── nginx.conf.template
 │   └── docker-compose.nginx.yml.template
 └── references/                 # Reference docs
@@ -88,4 +85,7 @@ worktree/
 
 worktree-agent/
 └── SKILL.md                    # Agent spawning skill
+
+pkg/                            # Go CLI source (wt)
+main.go
 ```
