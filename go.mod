@@ -1,4 +1,4 @@
-module claude-worktree-skill
+module github.com/Tondeptrai23/claude-worktree-skills
 
 go 1.23.4
 
