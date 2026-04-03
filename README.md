@@ -25,11 +25,20 @@ Creates worktree, starts services, provides nginx-routed test URLs (`http://f1.l
 
 ## Installation
 
-Copy both folders into your Claude Code skills directory:
+Run from your project root:
 
 ```bash
-cp -r worktree worktree-agent ~/.claude/skills/
+curl -sSL https://raw.githubusercontent.com/Tondeptrai23/claude-worktree-skills/main/install.sh | bash
 ```
+
+Or clone and run locally:
+
+```bash
+git clone https://github.com/Tondeptrai23/claude-worktree-skills.git /tmp/claude-worktree-skills
+/tmp/claude-worktree-skills/install.sh
+```
+
+This installs skills to `.claude/skills/`, builds the `wt` CLI to `.claude/bin/`, and updates `.gitignore`.
 
 ## How It Works
 
