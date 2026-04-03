@@ -49,15 +49,20 @@ func runStart(c *cli.Context) error {
 	servicesFilter := c.String("services")
 	filterSet := parseServiceFilter(servicesFilter)
 
-	// Merge env files (secrets + overrides)
-	fmt.Printf("\033[32m[*]\033[0m Merging environment files for slot %d\n", slotNum)
-	if err := envgen.MergeEnv(slotNum, cfg, rootDir, slotDir); err != nil {
-		return fmt.Errorf("merging env: %w", err)
-	}
-
-	// Ensure nginx is running
+	// Ensure nginx is running BEFORE merging env — nginx may change the
+	// listen port if the default is occupied, and {{svc.url}} templates
+	// resolve to nginx subdomains that include this port.
 	if err := nginx.EnsureRunning(cfg, rootDir); err != nil {
 		fmt.Printf("\033[33m[!]\033[0m Could not start nginx: %v\n", err)
+	}
+
+	// Regenerate .env.overrides with the resolved nginx port, then merge
+	fmt.Printf("\033[32m[*]\033[0m Merging environment files for slot %d\n", slotNum)
+	if err := envgen.GenerateOverrides(slotNum, meta.FeatureName, cfg, slotDir); err != nil {
+		fmt.Printf("\033[33m[!]\033[0m Could not regenerate env overrides: %v\n", err)
+	}
+	if err := envgen.MergeEnv(slotNum, cfg, rootDir, slotDir); err != nil {
+		return fmt.Errorf("merging env: %w", err)
 	}
 
 	// Start services

@@ -33,6 +33,7 @@ func main() {
 			cmd.DestroyCommand(),
 			cmd.StatusCommand(),
 			cmd.LogsCommand(),
+			cmd.VerifyCommand(),
 		},
 		Before: func(c *cli.Context) error {
 			// Skip config loading for help/version/install

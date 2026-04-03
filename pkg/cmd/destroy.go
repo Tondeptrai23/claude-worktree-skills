@@ -43,18 +43,24 @@ func runDestroy(c *cli.Context) error {
 	}
 
 	slotDir := config.SlotDir(rootDir, slotNum)
+	slotExists := true
 	if _, err := os.Stat(slotDir); os.IsNotExist(err) {
-		return fmt.Errorf("slot %d does not exist", slotNum)
+		slotExists = false
 	}
 
-	// Stop services first
-	fmt.Printf("\033[32m[*]\033[0m Stopping services for slot %d\n", slotNum)
-	stopServices(slotDir)
+	// Stop services first (only if slot dir exists)
+	if slotExists {
+		fmt.Printf("\033[32m[*]\033[0m Stopping services for slot %d\n", slotNum)
+		stopServices(slotDir)
+	}
 
 	fmt.Printf("\033[32m[*]\033[0m Destroying feature slot %d\n", slotNum)
 
 	// Load metadata to know which repos to remove
-	meta, _ := slot.Load(slotDir)
+	var meta *slot.SlotMeta
+	if slotExists {
+		meta, _ = slot.Load(slotDir)
+	}
 
 	// Remove git worktrees
 	removedRepos := make(map[string]bool)
@@ -71,15 +77,45 @@ func runDestroy(c *cli.Context) error {
 			}
 
 			worktreeDir := filepath.Join(slotDir, repoKey)
+			repoDir := filepath.Join(rootDir, svc.Path)
+			fmt.Printf("\033[32m[*]\033[0m Removing %s/ worktree\n", repoKey)
+			if err := gitops.RemoveWorktree(repoDir, worktreeDir); err != nil {
+				fmt.Printf("\033[33m[!]\033[0m Worktree removal for %s: %v\n", repoKey, err)
+			}
+			removedRepos[repoKey] = true
+		}
+	} else if slotExists {
+		// No metadata — try to find worktree dirs by scanning the slot directory
+		// and remove them using each service's repo path
+		fmt.Println("\033[33m[!]\033[0m No slot metadata found, attempting cleanup by scanning services")
+		for svcName, svc := range cfg.Services {
+			repoKey := svc.RepoKey()
+			if removedRepos[repoKey] {
+				continue
+			}
+			worktreeDir := filepath.Join(slotDir, repoKey)
 			if _, err := os.Stat(worktreeDir); os.IsNotExist(err) {
 				continue
 			}
-
 			repoDir := filepath.Join(rootDir, svc.Path)
-			fmt.Printf("\033[32m[*]\033[0m Removing %s/ worktree\n", repoKey)
-			gitops.RemoveWorktree(repoDir, worktreeDir)
+			fmt.Printf("\033[32m[*]\033[0m Removing %s/ worktree (discovered)\n", repoKey)
+			if err := gitops.RemoveWorktree(repoDir, worktreeDir); err != nil {
+				fmt.Printf("\033[33m[!]\033[0m Worktree removal for %s: %v\n", svcName, err)
+			}
 			removedRepos[repoKey] = true
 		}
+	}
+
+	// Also prune any orphaned worktree references for all service repos
+	prunedRepos := make(map[string]bool)
+	for _, svc := range cfg.Services {
+		repoDir := filepath.Join(rootDir, svc.Path)
+		repoKey := svc.RepoKey()
+		if prunedRepos[repoKey] {
+			continue
+		}
+		gitops.PruneWorktrees(repoDir)
+		prunedRepos[repoKey] = true
 	}
 
 	// Run database teardown if requested
@@ -91,7 +127,9 @@ func runDestroy(c *cli.Context) error {
 	}
 
 	// Remove slot directory
-	os.RemoveAll(slotDir)
+	if slotExists {
+		os.RemoveAll(slotDir)
+	}
 
 	// Regenerate nginx
 	nginx.Generate(cfg, rootDir)

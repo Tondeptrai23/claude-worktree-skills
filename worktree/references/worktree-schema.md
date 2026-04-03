@@ -111,9 +111,17 @@ database:
       notes: "Alembic with search_path in connection URL"
 
 # Service definitions
+#
+# IMPORTANT — path vs subdir:
+#   path:   the git repo root (relative to project root). This is where .git lives.
+#   subdir: subdirectory within the repo where the service code lives (optional).
+#
+#   Monorepo (one .git at project root):  path: .     subdir: be
+#   Multi-repo (each service has .git):   path: ./be  (no subdir needed)
+#
 services:
   be:
-    # Path to service directory (relative to project root)
+    # Path to the git repo containing this service (relative to project root)
     path: ./be
     # Port this service listens on in slot 0 (main checkout)
     port_base: 8080
@@ -289,7 +297,8 @@ database:
 
 services:
   api:
-    path: ./api
+    path: .          # monorepo: .git is at project root
+    subdir: api      # service code lives in api/
     port_base: 3000
     expose: true
     env_file: .env
@@ -302,7 +311,8 @@ services:
       PORT: "{{self.port}}"
 
   web:
-    path: ./web
+    path: .          # same repo
+    subdir: web      # service code lives in web/
     port_base: 3001
     expose: true
     env_file: .env

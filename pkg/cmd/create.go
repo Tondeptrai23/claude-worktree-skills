@@ -98,6 +98,11 @@ func runCreate(c *cli.Context) error {
 			return fmt.Errorf("creating worktree for %s: %w", repoKey, err)
 		}
 
+		// Write git excludes for runtime files so they don't appear in git status
+		if err := gitops.WriteWorktreeExcludes(targetDir); err != nil {
+			fmt.Printf("\033[33m[!]\033[0m Could not write git excludes for %s: %v\n", repoKey, err)
+		}
+
 		createdRepos[repoKey] = true
 		meta.Services[svcName] = slot.SlotServiceMeta{
 			Branch:  branch,

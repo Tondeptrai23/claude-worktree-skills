@@ -23,6 +23,12 @@ If `worktree.yml` doesn't exist and the user requests a non-bootstrap operation,
 
 The `wt` CLI is installed at `.claude/bin/wt`. All slot operations go through it — no shell scripts needed.
 
+**Always use an absolute path** to invoke `wt` to avoid breakage when cd'd into subdirectories:
+```bash
+WT="$(git rev-parse --show-toplevel)/.claude/bin/wt"
+$WT create 1 my-feature
+```
+
 ---
 
 ## Bootstrap
@@ -58,7 +64,8 @@ Use Explore agents to gather:
 8. **CORS** — search backend services for CORS config. See [references/cors-audit.md](references/cors-audit.md) for where to look per framework
 9. **Database migrations** — detect migration tools and write the `run` command. See [references/db-isolation.md](references/db-isolation.md)
 10. **Private files** — read each service's `.gitignore` (and root `.gitignore`) to find gitignored files that exist on disk (credentials, keys, certs). Common patterns: `*service-account*.json`, `*.pem`, `*.key`, `*.p12`, `*credentials*.json`, `*firebase*.json`
-11. **Existing project skills** — scan `.claude/skills/` for workflow skills (plan, implement, test, commit, create-mr, etc.) to document in `worktree.yml`
+11. **Cross-service env var audit** — for each service, read the **actual `.env` file on disk** (it exists even though gitignored). For every value that is a URL containing `localhost:PORT` where PORT matches another service's `port_base`, record it as a cross-service reference. Note the **exact key name** (e.g., `VITE_API_BASE_URL`, not `VITE_API_URL`). Also check browser-consumed prefixes (`VITE_*`, `NEXT_PUBLIC_*`, `REACT_APP_*`). If `.env` doesn't exist, read `.env.sample` instead.
+12. **Existing project skills** — scan `.claude/skills/` for workflow skills (plan, implement, test, commit, create-mr, etc.) to document in `worktree.yml`
 
 ### Step 2: Present findings and resolve
 
@@ -105,6 +112,31 @@ Questions:
 
 Write the config to the project root (or `.claude/worktree/worktree.yml`). See [references/worktree-schema.md](references/worktree-schema.md) for the full schema.
 
+**Critical rules:**
+
+1. **Monorepo path/subdir** — if `git_topology: monorepo`, every service MUST use `path: "."` with `subdir: <dir>`. Do NOT use `path: "./<dir>"` for monorepos — that tells `wt` to look for `.git` inside the subdirectory, which doesn't exist.
+   ```yaml
+   # CORRECT for monorepo:
+   services:
+     backend:
+       path: .
+       subdir: TLL_backend
+   # WRONG for monorepo:
+   services:
+     backend:
+       path: ./TLL_backend    # ← wt will look for TLL_backend/.git and fail
+   ```
+
+2. **env_overrides exact key names** — for every cross-service URL variable found in Step 1 item 11, add an entry to `env_overrides` using the **exact key name** from the `.env` file. Do NOT guess or use names from examples.
+   ```yaml
+   # If .env has VITE_API_BASE_URL=http://localhost:3000
+   env_overrides:
+     VITE_API_BASE_URL: "{{backend.url}}"    # ← exact key from .env
+   # NOT: VITE_API_URL: "{{backend.url}}"    # ← wrong key name, override won't replace
+   ```
+
+3. **Browser-consumed URLs** — variables prefixed with `VITE_*`, `NEXT_PUBLIC_*`, or `REACT_APP_*` are consumed by the browser. Use `{{svc.url}}` which resolves to the nginx subdomain when available. Server-consumed URLs (backend-to-backend) use `http://localhost:{{svc.port}}`.
+
 Key things to encode:
 - `env_overrides` per service with templates (`{{self.port}}`, `{{svc.url}}`, `{{db.schema}}`)
 - `database.setup` / `database.teardown` commands for schema isolation
@@ -127,6 +159,22 @@ Then add to `.gitignore`: `.worktrees/`, `.env.overrides`
 
 For URL resolution in env_overrides, see [references/url-resolution.md](references/url-resolution.md).
 For database isolation implementation, see [references/db-isolation.md](references/db-isolation.md).
+
+### Step 5: Verify
+
+Run `wt verify` to validate the generated `worktree.yml` against the actual project:
+
+```bash
+$(git rev-parse --show-toplevel)/.claude/bin/wt verify
+```
+
+This checks:
+- Service paths resolve to directories with `.git`
+- Subdirs exist within repos
+- `env_overrides` template vars reference defined services
+- **Cross-service URL detection**: scans `.env` files for `localhost:PORT` URLs that match other services' `port_base` but are missing from `env_overrides`
+
+If `wt verify` reports warnings about missing env_overrides, add the suggested entries to `worktree.yml` and re-run until clean.
 
 ---
 
@@ -178,3 +226,34 @@ See [references/integration.md](references/integration.md) for how other skills/
 - `.env.overrides` = ports/URLs only (safe for agents). `.env` and `private_files` = secrets (merged at start time, agents should not read)
 - Feature names are sanitized for DNS: `TICKET-123` -> `ticket-123.be.localhost`
 - Max 3 slots by default, configurable in `worktree.yml`
+
+---
+
+## Manual Recovery
+
+If `wt destroy` fails or the binary is broken, clean up manually:
+
+```bash
+# 1. Stop processes
+kill $(cat .worktrees/slot-N/.pids/*.pid 2>/dev/null) 2>/dev/null
+
+# 2. Remove git worktree references
+# For monorepo (path: .):
+git worktree remove --force .worktrees/slot-N
+
+# For multi-repo (path: ./be, ./fe):
+git -C be worktree remove --force .worktrees/slot-N/be
+git -C fe worktree remove --force .worktrees/slot-N/fe
+
+# 3. Prune any orphaned references
+git worktree prune
+
+# 4. Remove the slot directory
+rm -rf .worktrees/slot-N
+
+# 5. If using DB schema isolation, drop the schema
+# PGPASSWORD=... psql -h localhost -U user -d dbname -c 'DROP SCHEMA IF EXISTS feature_N CASCADE'
+
+# 6. If using DB container isolation, remove the container
+# docker rm -f <project>-db-slot-N
+```

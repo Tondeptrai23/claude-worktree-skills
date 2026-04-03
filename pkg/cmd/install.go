@@ -20,11 +20,8 @@ var SkillFilesRoot string
 
 func InstallCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "install",
-		Usage: "Install worktree skills and CLI into the current project",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{Name: "force", Aliases: []string{"f"}, Usage: "Overwrite existing files"},
-		},
+		Name:   "install",
+		Usage:  "Install or update worktree skills and CLI into the current project",
 		Action: runInstall,
 	}
 }
@@ -40,7 +37,6 @@ func runInstall(c *cli.Context) error {
 		return err
 	}
 
-	force := c.Bool("force")
 	claudeDir := filepath.Join(projectRoot, ".claude")
 	skillsDir := filepath.Join(claudeDir, "skills")
 	binDir := filepath.Join(claudeDir, "bin")
@@ -63,12 +59,6 @@ func runInstall(c *cli.Context) error {
 
 		if d.IsDir() {
 			return os.MkdirAll(targetPath, 0755)
-		}
-
-		if !force {
-			if _, err := os.Stat(targetPath); err == nil {
-				return nil // skip existing
-			}
 		}
 
 		data, err := SkillFiles.ReadFile(path)
@@ -115,7 +105,11 @@ func runInstall(c *cli.Context) error {
 	// 4. Update .gitignore
 	gitignorePath := filepath.Join(projectRoot, ".gitignore")
 	ensureGitignore(gitignorePath, ".claude/bin/")
+	ensureGitignore(gitignorePath, ".claude/skills/worktree/")
+	ensureGitignore(gitignorePath, ".claude/skills/worktree-agent/")
+	ensureGitignore(gitignorePath, ".claude/worktree/")
 	ensureGitignore(gitignorePath, ".worktrees/")
+	ensureGitignore(gitignorePath, ".env.overrides")
 	fmt.Println("\033[32m[OK]\033[0m Updated .gitignore")
 
 	// 5. Update CLAUDE.md

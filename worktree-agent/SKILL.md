@@ -42,6 +42,18 @@ Before doing anything, verify:
 
 2. **Verify `wt` CLI exists** at `.claude/bin/wt`. If not, tell user to run the install script.
 
+   **Always resolve the absolute path** to avoid breakage when cd'd into subdirectories:
+   ```bash
+   WT="$(git rev-parse --show-toplevel)/.claude/bin/wt"
+   ```
+   Use `$WT` for all subsequent commands.
+
+2b. **Run `wt verify`** to catch config issues before creating infrastructure:
+   ```bash
+   $WT verify
+   ```
+   If errors are reported, fix `worktree.yml` before proceeding. If warnings about missing env_overrides are reported, add the suggested entries to `worktree.yml`.
+
 3. **Read `worktree.yml`** to get: `max_slots`, service definitions, port scheme, DB isolation mode, branch prefix, nginx subdomain pattern.
 
 4. **Slot allocation** — if `--slot` not specified, find the first free slot:
@@ -50,7 +62,7 @@ Before doing anything, verify:
        [[ ! -d .worktrees/slot-${n} ]] && echo "$n" && break
    done
    ```
-   If all slots are occupied, run `.claude/bin/wt status` and ask user to destroy one.
+   If all slots are occupied, run `$WT status` and ask user to destroy one.
 
 5. **Quick health checks** (fail fast):
    - Disk space: `df --output=avail . | tail -1` — warn if < 5GB
@@ -70,7 +82,7 @@ If any critical check fails, report the issue and stop.
 ### Step 1: Create the worktree
 
 ```bash
-.claude/bin/wt create $SLOT $FEATURE_NAME --services $SERVICES
+$WT create $SLOT $FEATURE_NAME --services $SERVICES
 ```
 
 This handles: git worktree creation, env overrides, dependency install, DB setup + seed + migrations, nginx config regeneration.
@@ -80,10 +92,19 @@ If the command fails, report the error and clean up.
 ### Step 2: Start services
 
 ```bash
-.claude/bin/wt start $SLOT --services $SERVICES
+$WT start $SLOT --services $SERVICES
 ```
 
 This auto-starts nginx if not running (finding an available port if needed), merges env files (secrets + overrides), then launches the services.
+
+### Step 2b: Verify nginx is running
+
+After `wt start`, confirm nginx is actually up:
+```bash
+docker ps --format '{{.Names}}' | grep feature-router && echo "nginx up" || echo "nginx down"
+```
+
+If nginx is down, the subdomain URLs won't work. Report this to the user and use direct `localhost:{port}` URLs in the agent prompt instead. If nginx is up, use the subdomain URLs as primary test URLs.
 
 ### Step 3: Wait for services to be healthy
 
@@ -98,7 +119,7 @@ done
 
 If a service doesn't come up within 60 seconds, check its log:
 ```bash
-.claude/bin/wt logs $SLOT $SERVICE
+$WT logs $SLOT $SERVICE
 ```
 Report the error and ask the user how to proceed.
 
@@ -124,7 +145,7 @@ Each service has its own subdirectory:
 {for each service in slot:}
   - {service}: {.worktrees/slot-N/repo_key/subdir/}
     Port: {port}
-    Logs: .claude/bin/wt logs {N} {service}
+    Logs: $WT logs {N} {service}
 
 ## Test URLs
 Your changes are served at these URLs (via nginx):
@@ -160,8 +181,8 @@ Instead:
 If your feature needs a NEW environment variable:
   1. Add it to the appropriate `.env.overrides` file in your worktree
   2. Restart the affected service:
-     .claude/bin/wt stop {N}
-     .claude/bin/wt start {N} --services {service}
+     $WT stop {N}
+     $WT start {N} --services {service}
   3. Do NOT modify .env files directly — they are overwritten on every restart
 
 ## Rules
@@ -171,6 +192,10 @@ If your feature needs a NEW environment variable:
 - Do NOT stop or restart services unless adding new env vars (they auto-reload on code changes)
 - If a service crashes, check its log and fix the code
 - Commit your changes to the feature branch when done
+- When committing, do NOT include these runtime/generated files:
+  - `.logs/`, `.pids/`, `.slot-meta.yml` (worktree runtime state)
+  - `**/.env.overrides` (generated port/URL overrides)
+  - Stage only the files you actually changed (use `git add <file>`, not `git add -A`)
 ```
 
 Set `run_in_background` based on the `--background` flag.
@@ -191,8 +216,8 @@ When the agent completes:
 If `--keep` was specified, leave everything running and tell the user:
 ```
 Worktree slot {N} is still running. When done testing:
-  .claude/bin/wt stop {N}
-  .claude/bin/wt destroy {N}
+  $WT stop {N}
+  $WT destroy {N}
 ```
 
 If `--keep` was NOT specified, ask the user:
