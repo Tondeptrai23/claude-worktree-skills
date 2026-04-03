@@ -64,7 +64,7 @@ Use Explore agents to gather:
 8. **CORS** — search backend services for CORS config. See [references/cors-audit.md](references/cors-audit.md) for where to look per framework
 9. **Database migrations** — detect migration tools and write the `run` command. See [references/db-isolation.md](references/db-isolation.md)
 10. **Private files** — read each service's `.gitignore` (and root `.gitignore`) to find gitignored files that exist on disk (credentials, keys, certs). Common patterns: `*service-account*.json`, `*.pem`, `*.key`, `*.p12`, `*credentials*.json`, `*firebase*.json`
-11. **Cross-service env var audit** — for each service, read the **actual `.env` file on disk** (it exists even though gitignored). For every value that is a URL containing `localhost:PORT` where PORT matches another service's `port_base`, record it as a cross-service reference. Note the **exact key name** (e.g., `VITE_API_BASE_URL`, not `VITE_API_URL`). Also check browser-consumed prefixes (`VITE_*`, `NEXT_PUBLIC_*`, `REACT_APP_*`). If `.env` doesn't exist, read `.env.sample` instead.
+11. **Cross-service env var audit** — for each service, read `.env.sample` or `.env.example` (NEVER read `.env` — it contains secrets). For every variable whose name suggests a URL to another service (e.g., `VITE_API_BASE_URL`, `API_URL`, `BACKEND_URL`), note the **exact key name** and which service it likely points to. Also check browser-consumed prefixes (`VITE_*`, `NEXT_PUBLIC_*`, `REACT_APP_*`). If `.env.sample` doesn't exist, infer from framework conventions and ask the user to confirm.
 12. **Existing project skills** — scan `.claude/skills/` for workflow skills (plan, implement, test, commit, create-mr, etc.) to document in `worktree.yml`
 
 ### Step 2: Present findings and resolve
@@ -172,9 +172,11 @@ This checks:
 - Service paths resolve to directories with `.git`
 - Subdirs exist within repos
 - `env_overrides` template vars reference defined services
-- **Cross-service URL detection**: scans `.env` files for `localhost:PORT` URLs that match other services' `port_base` but are missing from `env_overrides`
+- **Cross-service URL detection**: the binary internally reads `.env` files (safe — it only outputs key names and URL values, never secrets) and flags `localhost:PORT` URLs that match other services' `port_base` but are missing from `env_overrides`
 
 If `wt verify` reports warnings about missing env_overrides, add the suggested entries to `worktree.yml` and re-run until clean.
+
+**IMPORTANT**: Do NOT read `.env` files yourself — they contain secrets. Let `wt verify` handle the scanning. You should only ever read `.env.sample` or `.env.example`.
 
 ---
 
