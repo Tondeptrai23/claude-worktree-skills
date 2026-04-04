@@ -49,7 +49,7 @@ func runHealth(c *cli.Context) error {
 		return fmt.Errorf("slot %d does not exist", slotNum)
 	}
 
-	fmt.Printf("\033[32m[*]\033[0m Checking health for slot %d...\n", slotNum)
+	PrintInfo("Checking health for slot %d...\n", slotNum)
 
 	allHealthy := true
 
@@ -58,7 +58,7 @@ func runHealth(c *cli.Context) error {
 		// First check if process is running
 		pidFile := filepath.Join(slotDir, ".pids", svcName+".pid")
 		if _, running := process.IsRunning(pidFile); !running {
-			fmt.Printf("\033[31m[ERR]\033[0m %s: process not running\n", svcName)
+			PrintErr("%s: process not running\n", svcName)
 			allHealthy = false
 			continue
 		}
@@ -73,7 +73,7 @@ func runHealth(c *cli.Context) error {
 			if err == nil {
 				conn.Close()
 				elapsed := time.Since(start).Round(time.Millisecond)
-				fmt.Printf("\033[32m[OK]\033[0m %s: localhost:%d responding (%s)\n", svcName, svcMeta.Port, elapsed)
+				PrintOK("%s: localhost:%d responding (%s)\n", svcName, svcMeta.Port, elapsed)
 				healthy = true
 				break
 			}
@@ -81,7 +81,7 @@ func runHealth(c *cli.Context) error {
 		}
 
 		if !healthy {
-			fmt.Printf("\033[31m[ERR]\033[0m %s: localhost:%d not responding after %s\n", svcName, svcMeta.Port, timeout)
+			PrintErr("%s: localhost:%d not responding after %s\n", svcName, svcMeta.Port, timeout)
 			allHealthy = false
 		}
 	}
@@ -91,20 +91,20 @@ func runHealth(c *cli.Context) error {
 		checkNginxHealth(slotNum, meta, cfg, &allHealthy)
 	}
 
-	fmt.Println()
+	PrintInfo("")
 	if !allHealthy {
 		return fmt.Errorf("some services are unhealthy — check logs with 'wt logs %d <service>'", slotNum)
 	}
 
 	// Print test URLs
-	fmt.Println("Test URLs:")
+	PrintInfo("Test URLs:")
 	for svcName, svcMeta := range meta.Services {
 		svc, ok := cfg.Services[svcName]
 		if !ok || !svc.Expose {
 			continue
 		}
 		url := template.Resolve("{{"+svcName+".url}}", svcName, slotNum, meta.FeatureName, cfg)
-		fmt.Printf("  %s: %s (direct: localhost:%d)\n", svcName, url, svcMeta.Port)
+		PrintInfo("  %s: %s (direct: localhost:%d)\n", svcName, url, svcMeta.Port)
 	}
 
 	return nil
@@ -113,11 +113,11 @@ func runHealth(c *cli.Context) error {
 func checkNginxHealth(slotNum int, meta *slot.SlotMeta, cfg *config.Config, allHealthy *bool) {
 	out, _ := exec.Command("docker", "ps", "--format", "{{.Names}}").Output()
 	if !bytes.Contains(out, []byte("feature-router")) {
-		fmt.Printf("\033[33m[WARN]\033[0m Nginx: not running (subdomain URLs won't work)\n")
+		PrintWarn("Nginx: not running (subdomain URLs won't work)\n")
 		return
 	}
 
-	fmt.Printf("\033[32m[OK]\033[0m Nginx: running\n")
+	PrintOK("Nginx: running\n")
 
 	// Verify nginx can route to each exposed service
 	for svcName := range meta.Services {
@@ -132,9 +132,9 @@ func checkNginxHealth(slotNum int, meta *slot.SlotMeta, cfg *config.Config, allH
 		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 		if err == nil {
 			conn.Close()
-			fmt.Printf("\033[32m[OK]\033[0m Nginx → %s: %s\n", svcName, url)
+			PrintOK("Nginx → %s: %s\n", svcName, url)
 		} else {
-			fmt.Printf("\033[33m[WARN]\033[0m Nginx → %s: port %d not reachable\n", svcName, cfg.Nginx.Port)
+			PrintWarn("Nginx → %s: port %d not reachable\n", svcName, cfg.Nginx.Port)
 		}
 	}
 }

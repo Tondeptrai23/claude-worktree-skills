@@ -53,13 +53,13 @@ func runStart(c *cli.Context) error {
 	// listen port if the default is occupied, and {{svc.url}} templates
 	// resolve to nginx subdomains that include this port.
 	if err := nginx.EnsureRunning(cfg, rootDir); err != nil {
-		fmt.Printf("\033[33m[!]\033[0m Could not start nginx: %v\n", err)
+		PrintWarn("Could not start nginx: %v\n", err)
 	}
 
 	// Regenerate .env.overrides with the resolved nginx port, then merge
-	fmt.Printf("\033[32m[*]\033[0m Merging environment files for slot %d\n", slotNum)
+	PrintInfo("Merging environment files for slot %d\n", slotNum)
 	if err := envgen.GenerateOverrides(slotNum, meta.FeatureName, cfg, slotDir); err != nil {
-		fmt.Printf("\033[33m[!]\033[0m Could not regenerate env overrides: %v\n", err)
+		PrintWarn("Could not regenerate env overrides: %v\n", err)
 	}
 	if err := envgen.MergeEnv(slotNum, cfg, rootDir, slotDir); err != nil {
 		return fmt.Errorf("merging env: %w", err)
@@ -90,7 +90,7 @@ func runStart(c *cli.Context) error {
 
 		// Skip if already running
 		if pid, running := process.IsRunning(pidFile); running {
-			fmt.Printf("\033[33m[!]\033[0m %s already running (PID %d)\n", svcName, pid)
+			PrintWarn("%s already running (PID %d)\n", svcName, pid)
 			continue
 		}
 
@@ -103,18 +103,19 @@ func runStart(c *cli.Context) error {
 			env[svc.PortEnv] = fmt.Sprintf("%d", svcMeta.Port)
 		}
 
-		fmt.Printf("\033[32m[*]\033[0m Starting %s on port %d\n", svcName, svcMeta.Port)
+		PrintInfo("Starting %s on port %d\n", svcName, svcMeta.Port)
 
 		if err := process.Spawn(workDir, startCmd, env, logFile, pidFile); err != nil {
-			fmt.Printf("\033[31m[!]\033[0m Failed to start %s: %v\n", svcName, err)
+			PrintErr("Failed to start %s: %v\n", svcName, err)
 			continue
 		}
 
 		pid, _ := process.IsRunning(pidFile)
-		fmt.Printf("\033[32m[OK]\033[0m %s started (PID %d)\n", svcName, pid)
+		PrintOK("%s started (PID %d)\n", svcName, pid)
 	}
 
-	fmt.Printf("\n\033[32m[OK]\033[0m Services started for slot %d\n", slotNum)
+	fmt.Printf("\n")
+	PrintOK("Services started for slot %d\n", slotNum)
 	fmt.Printf("  Logs: %s/\n", logsDir)
 	fmt.Printf("  Stop: wt stop %d\n", slotNum)
 	return nil

@@ -50,11 +50,11 @@ func runDestroy(c *cli.Context) error {
 
 	// Stop services first (only if slot dir exists)
 	if slotExists {
-		fmt.Printf("\033[32m[*]\033[0m Stopping services for slot %d\n", slotNum)
+		PrintInfo("Stopping services for slot %d\n", slotNum)
 		stopServices(slotDir)
 	}
 
-	fmt.Printf("\033[32m[*]\033[0m Destroying feature slot %d\n", slotNum)
+	PrintInfo("Destroying feature slot %d\n", slotNum)
 
 	// Load metadata to know which repos to remove
 	var meta *slot.SlotMeta
@@ -78,16 +78,16 @@ func runDestroy(c *cli.Context) error {
 
 			worktreeDir := filepath.Join(slotDir, repoKey)
 			repoDir := filepath.Join(rootDir, svc.Path)
-			fmt.Printf("\033[32m[*]\033[0m Removing %s/ worktree\n", repoKey)
+			PrintInfo("Removing %s/ worktree\n", repoKey)
 			if err := gitops.RemoveWorktree(repoDir, worktreeDir); err != nil {
-				fmt.Printf("\033[33m[!]\033[0m Worktree removal for %s: %v\n", repoKey, err)
+				PrintWarn("Worktree removal for %s: %v\n", repoKey, err)
 			}
 			removedRepos[repoKey] = true
 		}
 	} else if slotExists {
 		// No metadata — try to find worktree dirs by scanning the slot directory
 		// and remove them using each service's repo path
-		fmt.Println("\033[33m[!]\033[0m No slot metadata found, attempting cleanup by scanning services")
+		PrintWarn("No slot metadata found, attempting cleanup by scanning services\n")
 		for svcName, svc := range cfg.Services {
 			repoKey := svc.RepoKey()
 			if removedRepos[repoKey] {
@@ -98,9 +98,9 @@ func runDestroy(c *cli.Context) error {
 				continue
 			}
 			repoDir := filepath.Join(rootDir, svc.Path)
-			fmt.Printf("\033[32m[*]\033[0m Removing %s/ worktree (discovered)\n", repoKey)
+			PrintInfo("Removing %s/ worktree (discovered)\n", repoKey)
 			if err := gitops.RemoveWorktree(repoDir, worktreeDir); err != nil {
-				fmt.Printf("\033[33m[!]\033[0m Worktree removal for %s: %v\n", svcName, err)
+				PrintWarn("Worktree removal for %s: %v\n", svcName, err)
 			}
 			removedRepos[repoKey] = true
 		}
@@ -120,9 +120,9 @@ func runDestroy(c *cli.Context) error {
 
 	// Run database teardown if requested
 	if c.Bool("teardown-db") {
-		fmt.Printf("\033[32m[*]\033[0m Running database teardown\n")
+		PrintInfo("Running database teardown\n")
 		if err := db.Teardown(cfg, slotNum); err != nil {
-			fmt.Printf("\033[33m[!]\033[0m Database teardown failed: %v\n", err)
+			PrintWarn("Database teardown failed: %v\n", err)
 		}
 	}
 
@@ -135,7 +135,7 @@ func runDestroy(c *cli.Context) error {
 	nginx.Generate(cfg, rootDir)
 	nginx.Reload()
 
-	fmt.Printf("\033[32m[OK]\033[0m Feature slot %d destroyed\n", slotNum)
+	PrintOK("Feature slot %d destroyed\n", slotNum)
 	return nil
 }
 
@@ -154,9 +154,9 @@ func stopServices(slotDir string) {
 		pidFile := filepath.Join(pidsDir, entry.Name())
 		pid, err := process.KillByPidFile(pidFile, 5*time.Second)
 		if err != nil {
-			fmt.Printf("\033[31m[!]\033[0m Error stopping %s: %v\n", svcName, err)
+			PrintErr("Error stopping %s: %v\n", svcName, err)
 		} else if pid > 0 {
-			fmt.Printf("\033[32m[OK]\033[0m Stopped %s (PID %d)\n", svcName, pid)
+			PrintOK("Stopped %s (PID %d)\n", svcName, pid)
 		}
 	}
 }

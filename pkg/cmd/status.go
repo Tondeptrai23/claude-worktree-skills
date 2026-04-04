@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"path/filepath"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/process"
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/slot"
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/template"
+	"github.com/jedib0t/go-pretty/v6/table"
 
 	"github.com/urfave/cli/v2"
 )
@@ -57,9 +57,9 @@ func runStatus(c *cli.Context) error {
 	worktreesDir := config.WorktreesDir(rootDir)
 	slots, _ := slot.DiscoverSlots(worktreesDir)
 
-	fmt.Println()
-	fmt.Println("=== Feature Worktree Status ===")
-	fmt.Println()
+	PrintEmptyLine()
+	Print("=== Feature Worktree Status ===\n")
+	PrintEmptyLine()
 
 	found := false
 	for _, meta := range slots {
@@ -70,45 +70,36 @@ func runStatus(c *cli.Context) error {
 
 		slotDir := config.SlotDir(rootDir, meta.Slot)
 
-		fmt.Printf("\033[36mSlot %d: %s\033[0m\n", meta.Slot, meta.FeatureName)
-		fmt.Printf("  Created: %s\n", meta.CreatedAt)
-		fmt.Printf("  Path:    %s\n", slotDir)
-		fmt.Println()
+		PrintInfo("Slot %d: %s", meta.Slot, meta.FeatureName)
+		Print("  Created: %s\n", meta.CreatedAt)
+		Print("  Path:    %s\n", slotDir)
+		PrintEmptyLine()
 
 		// Service table
-		w := tabwriter.NewWriter(os.Stdout, 2, 0, 2, ' ', 0)
-		for svcName, svcMeta := range meta.Services {
-			pidFile := filepath.Join(slotDir, ".pids", svcName+".pid")
-			status := "\033[31mstopped\033[0m"
-			if pid, running := process.IsRunning(pidFile); running {
-				status = fmt.Sprintf("\033[32mrunning\033[0m (PID %d)", pid)
-			}
-			fmt.Fprintf(w, "  %s\tport %d\t%s\tbranch: %s\n",
-				svcName, svcMeta.Port, status, svcMeta.Branch)
-		}
-		w.Flush()
-
-		// URLs
-		if cfg.Nginx.Enabled {
-			fmt.Println()
-			fmt.Println("  URLs:")
-			for svcName := range meta.Services {
-				svc, ok := cfg.Services[svcName]
-				if !ok || !svc.Expose {
-					continue
+		PrintTable([]string{"Service", "Port", "Status", "Branch", "URLs"}, func() []table.Row {
+			rows := []table.Row{}
+			for svcName, svcMeta := range meta.Services {
+				pidFile := filepath.Join(slotDir, ".pids", svcName+".pid")
+				status := SprintColor(ColorRed, "Stopped")
+				if pid, running := process.IsRunning(pidFile); running {
+					status = SprintColor(ColorGreen, "Running (PID %d)", pid)
 				}
-				url := template.Resolve("{{"+svcName+".url}}", svcName, meta.Slot, meta.FeatureName, cfg)
-				fmt.Printf("    %s\n", url)
+				svc, ok := cfg.Services[svcName]
+				url := "N/A"
+				if ok && svc.Expose {
+					url = template.Resolve("{{"+svcName+".url}}", svcName, meta.Slot, meta.FeatureName, cfg)
+				}
+				rows = append(rows, table.Row{svcName, svcMeta.Port, status, svcMeta.Branch, url})
 			}
-		}
-		fmt.Println()
+			return rows
+		}())
 	}
 
 	if !found {
-		fmt.Println("  No active feature slots.")
-		fmt.Println()
-		fmt.Println("  Create one with: wt create 1 my-feature")
-		fmt.Println()
+		Print("  No active feature slots.\n")
+		PrintEmptyLine()
+		Print("  Create one with: wt create 1 my-feature\n")
+		PrintEmptyLine()
 	}
 
 	return nil

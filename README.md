@@ -60,6 +60,24 @@ Each slot gets ports offset by 100 from the base:
 - `.env` — secrets, generated at start time from main checkout, agents should not read
 - `.env.sample` — variable names and descriptions, safe to read
 
+## Building from Source
+
+```bash
+# Build the wt binary
+go build -o wt .
+
+# Build with version tag
+go build -ldflags "-X main.version=1.2.3" -o wt .
+
+# Run directly without building
+go run . <command>
+
+# Install into a project for local testing (from this repo root)
+go run . install
+```
+
+The embedded skill files (`worktree/`, `worktree-agent/`) are baked into the binary at build time via `//go:embed`, so the binary is self-contained.
+
 ## Requirements
 
 - Go 1.23+ (to build the `wt` CLI)

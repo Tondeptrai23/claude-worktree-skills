@@ -47,7 +47,7 @@ func runVerify(c *cli.Context) error {
 
 	result := &verifyResult{}
 
-	fmt.Println("\033[32m[*]\033[0m Verifying worktree.yml...")
+	PrintInfo("Verifying worktree.yml...\n")
 	fmt.Println()
 
 	// 1. Structural checks
@@ -67,13 +67,13 @@ func runVerify(c *cli.Context) error {
 	// Print results
 	fmt.Println()
 	for _, msg := range result.info {
-		fmt.Printf("\033[32m[OK]\033[0m %s\n", msg)
+		PrintOK("%s\n", msg)
 	}
 	for _, msg := range result.warnings {
-		fmt.Printf("\033[33m[WARN]\033[0m %s\n", msg)
+		PrintWarn("%s\n", msg)
 	}
 	for _, msg := range result.errors {
-		fmt.Printf("\033[31m[ERR]\033[0m %s\n", msg)
+		PrintErr("%s\n", msg)
 	}
 
 	fmt.Println()

@@ -36,140 +36,196 @@ cd "$(git rev-parse --show-toplevel)"
 
 ## Bootstrap
 
+Bootstrap uses three agents: an **Explore agent** to detect project structure (handles ambiguity), a **Generation agent** to produce correct YAML (clean context, focused rules), and **you as the orchestrator** in between.
+
 ### Step 0: Pre-flight
 
-Run `make doctor` if the project has it:
-```bash
-grep -qE '^doctor:|^check-deps:' Makefile 2>/dev/null && make doctor
-```
+Verify `wt` CLI exists at `.claude/bin/wt`. If not, tell user to run the install script.
 
-Otherwise, run `--version` checks for detected tools:
-- Always: `git --version`, `docker --version`, `docker compose version`
-- If `build.gradle`/`pom.xml` found: `java --version`
-- If `package.json` found: `node --version` + package manager (`pnpm`/`yarn`/`npm`)
+Run basic tool checks:
+- `git --version`, `docker --version`, `docker compose version`
+- If `package.json` found: `node --version`
 - If `requirements.txt`/`pyproject.toml` found: `python3 --version`
 
-Check that each service directory has `.git`. If missing, tell user to clone repos first.
+### Step 1: Explore the project
 
-Verify `wt` CLI exists at `.claude/bin/wt`. If not, tell user to run the install script first.
+Spawn an **Explore agent** (`subagent_type: Explore`, thoroughness: `very thorough`) with this prompt:
 
-### Step 1: Analyze the project
+```
+Analyze this project for multi-feature worktree setup. Report structured findings.
 
-Use Explore agents to gather:
+## What to detect
 
-1. **Project structure** — top-level directories, which are services
-2. **Git topology** — monorepo (single `.git`) or multi-repo (each service has own `.git`)
-3. **Service detection** — `package.json`, `build.gradle`, `requirements.txt`, `go.mod`, `Cargo.toml`, `Dockerfile`
-4. **Ports** — read Vite configs, Spring Boot `application.yml`, uvicorn commands, docker-compose `ports:`, `.env.sample`
-5. **Environment variables** — which env vars reference other services, where `.env`/`.env.sample` live, which are browser-consumed (`VITE_*`, `NEXT_PUBLIC_*`, `REACT_APP_*`)
-6. **Infrastructure** — `docker-compose.yml` for databases, caches, auth servers
-7. **Start commands** — `package.json` scripts, direct CLI commands, docker-compose services
-8. **CORS** — search backend services for CORS config. See [references/cors-audit.md](references/cors-audit.md) for where to look per framework
-9. **Database migrations** — detect migration tools and write the `run` command. See [references/db-isolation.md](references/db-isolation.md)
-10. **Private files** — read each service's `.gitignore` (and root `.gitignore`) to find gitignored files that exist on disk (credentials, keys, certs). Common patterns: `*service-account*.json`, `*.pem`, `*.key`, `*.p12`, `*credentials*.json`, `*firebase*.json`
-11. **Cross-service env var audit** — for each service, read `.env.sample` or `.env.example` (NEVER read `.env` — it contains secrets). For every variable whose name suggests a URL to another service (e.g., `VITE_API_BASE_URL`, `API_URL`, `BACKEND_URL`), note the **exact key name** and which service it likely points to. Also check browser-consumed prefixes (`VITE_*`, `NEXT_PUBLIC_*`, `REACT_APP_*`). If `.env.sample` doesn't exist, infer from framework conventions and ask the user to confirm.
-12. **Existing project skills** — scan `.claude/skills/` for workflow skills (plan, implement, test, commit, create-mr, etc.) to document in `worktree.yml`
+1. **Git topology** — single .git at project root (monorepo) or each service has own .git (multi-repo)?
+2. **Services** — which directories are services? Look for: package.json, build.gradle, pom.xml, requirements.txt, pyproject.toml, go.mod, Cargo.toml, Dockerfile
+3. **Ports** — read Vite configs, Spring Boot application.yml, uvicorn commands, docker-compose ports:, .env.sample
+4. **Start commands** — package.json scripts, Gradle tasks, uvicorn commands
+5. **Env files** — where .env.sample/.env.example live. Read them for variable structure.
+6. **Cross-service env vars** — in .env.sample, find variables whose values are URLs containing localhost:PORT where PORT matches another service's port. Note the EXACT key name and which service it points to. Check browser-consumed prefixes (VITE_*, NEXT_PUBLIC_*, REACT_APP_*).
+7. **CORS** — search backend services for CORS config (env-driven? hardcoded? which env var?)
+8. **Database** — docker-compose files for infrastructure, migration tools (Flyway, Alembic, TypeORM, Prisma, etc.)
+9. **Private files** — gitignored files that exist on disk (credentials, keys, certs). Check .gitignore for patterns like *service-account*.json, *.pem, *.key, *credentials*.json
+10. **Infrastructure** — docker-compose services for databases, caches, auth servers. Note the compose file path relative to project root.
+
+## IMPORTANT
+- Read .env.sample or .env.example — NEVER read .env (contains secrets)
+- Do NOT generate any YAML config — just report findings
+- If something is ambiguous, say so and explain what you found
+
+## Report Format
+
+### Git Topology
+type: monorepo | multi-repo
+
+### Services
+For each service:
+- name: <suggested key, e.g., "backend", "frontend">
+  directory: <relative path>
+  has_git: true/false
+  framework: <e.g., NestJS, Vite+React, Spring Boot, FastAPI>
+  port_base: <default port number>
+  port_source: <where you found it>
+  start_command: <dev start command>
+  install_command: <or "none">
+  env_file: <which env file exists: .env.sample / .env.example / none>
+  env_loader: <spring-dotenv / dotenv / vite / none>
+  port_env: <env var that controls port, or "none">
+
+### Cross-Service Env Vars
+For each service with cross-service references:
+- service: <name>
+  file_scanned: <path>
+  variables:
+    - key: <EXACT key name>
+      target_service: <which service, based on port>
+      browser_consumed: true/false
+
+### CORS
+For each backend service:
+- service: <name>
+  type: env-driven | hardcoded | open | none
+  env_var: <if env-driven>
+  config_file: <path>
+
+### Database
+infrastructure_compose: <path relative to project root>
+infrastructure_services: [list]
+migrations:
+  - service: <name>
+    tool: <tool name>
+    location: <migration files directory>
+
+### Private Files
+<list>
+
+### Notes
+<anything ambiguous or unusual>
+```
+
+Capture the Explore agent's output — you'll pass it to both the user and the Generation agent.
 
 ### Step 2: Present findings and resolve
 
-**IMPORTANT**: You MUST use the `AskUserQuestion` tool to present findings and ask questions. Do NOT use inline text — the user needs a structured prompt they can respond to. Batch ALL questions into a single `AskUserQuestion` call. Never ask multiple times.
+**IMPORTANT**: Use `AskUserQuestion` to present findings and ask questions. Batch ALL questions into a single call.
 
-Example `AskUserQuestion` content:
+Summarize the Explore agent's findings for the user, then ask:
 
-```
-Here's what I found:
+1. Are these all the services, or did I miss any?
+2. Dev mode (host processes) or Docker mode?
+3. Schema isolation OK, or prefer separate DB containers?
+4. What naming convention do you use for features/branches?
+   This determines both branch names AND nginx subdomains.
 
-Services:
-  - api/ (Spring Boot, port 8080) — git repo Y
-  - web/ (Vite + React, port 3000) — git repo Y
-  - worker/ (FastAPI, port 8081) — git repo Y
+   a) feature/{name}  (default)
+      `wt create 1 auth-redesign` → branch: feature/auth-redesign, URLs: auth-redesign-api.localhost
 
-Git topology: multi-repo (each service has own .git)
+   b) {name}  (plain)
+      `wt create 1 auth-redesign` → branch: auth-redesign, URLs: auth-redesign-api.localhost
 
-CORS:
-  - api/: env-driven (ALLOWED_ORIGINS) — will auto-configure Y
-  - worker/: env-driven (ALLOWED_ORIGINS) — will auto-configure Y
+   c) JIRA-{name}  (ticket ID)
+      `wt create 1 123` → branch: JIRA-123, URLs: 123-api.localhost
 
-Database: Hibernate ddl-auto=update, no versioned migrations
-  -> Recommending: schema isolation (separate schema per slot)
+   d) Custom: ___
 
-Private files found (gitignored but exist on disk):
-  - be/firebase-service-account.json
-  - genai/service-account.json
+5. Should I copy the private files listed above to worktrees?
 
-Questions:
-  1. Are these all the services, or did I miss any?
-  2. Dev mode (host processes) or Docker mode?
-  3. Schema isolation OK, or prefer separate DB containers?
-  4. What naming convention do you use for features/branches?
-     This determines both branch names AND nginx subdomains.
-
-     a) feature/{name}  (default)
-        wt create 1 auth-redesign
-        → branch: feature/auth-redesign
-        → URLs:   auth-redesign-api.localhost, auth-redesign.localhost
-
-     b) {name}  (plain)
-        wt create 1 auth-redesign
-        → branch: auth-redesign
-        → URLs:   auth-redesign-api.localhost
-
-     c) JIRA-{name}  (ticket ID)
-        wt create 1 123
-        → branch: JIRA-123
-        → URLs:   123-api.localhost, 123.localhost
-
-     d) Custom: ___
-
-  5. Should I copy the private files listed above to worktrees?
-```
-
-**You CAN infer** (don't ask): framework defaults (Spring Boot=8080, Vite=5173), common env patterns (`DATABASE_URL`, `API_URL`), git topology, browser-consumed env vars.
-
-**You MUST ask** (don't guess): which directories are services, unclear port assignments, cross-service URL mappings that aren't obvious, database isolation preference, naming convention.
+**You CAN infer** (don't ask): framework defaults, common env patterns, git topology, browser-consumed env vars.
+**You MUST ask** (don't guess): which directories are services, unclear port assignments, database isolation, naming convention.
 
 ### Step 3: Generate `worktree.yml`
 
-Write the config to the project root (or `.claude/worktree/worktree.yml`). See [references/worktree-schema.md](references/worktree-schema.md) for the full schema.
+Spawn a **Generation agent** (`subagent_type: general-purpose`) with the prompt below. Fill in `{exploration_findings}` and `{user_answers}` from Steps 1-2.
 
-**Critical rules:**
+```
+Generate a worktree.yml config file for this project. Write it to `.claude/worktree/worktree.yml`.
 
-1. **Monorepo path/subdir** — if `git_topology: monorepo`, every service MUST use `path: "."` with `subdir: <dir>`. Do NOT use `path: "./<dir>"` for monorepos — that tells `wt` to look for `.git` inside the subdirectory, which doesn't exist.
+## Project Findings
+
+{exploration_findings}
+
+## User's Answers
+
+{user_answers}
+
+## Schema Reference
+
+Read the full schema at `.claude/skills/worktree/references/worktree-schema.md` for the YAML structure and template variable reference.
+
+Also read:
+- `.claude/skills/worktree/references/url-resolution.md` for how {{svc.url}} resolves
+- `.claude/skills/worktree/references/db-isolation.md` for database isolation config
+- `.claude/skills/worktree/references/cors-audit.md` for CORS env_overrides
+
+## CRITICAL RULES
+
+1. **Monorepo path/subdir** — if monorepo, every service MUST use `path: "."` with `subdir: <dir>`.
+   Do NOT use `path: "./<dir>"` — wt will look for .git inside the subdirectory and fail.
    ```yaml
    # CORRECT for monorepo:
-   services:
-     backend:
-       path: .
-       subdir: TLL_backend
-   # WRONG for monorepo:
-   services:
-     backend:
-       path: ./TLL_backend    # ← wt will look for TLL_backend/.git and fail
+   backend:
+     path: .
+     subdir: TLL_backend
+   # WRONG — wt looks for TLL_backend/.git:
+   backend:
+     path: ./TLL_backend
    ```
 
-2. **env_overrides exact key names** — for every cross-service URL variable found in Step 1 item 11, add an entry to `env_overrides` using the **exact key name** from the `.env` file. Do NOT guess or use names from examples.
+2. **env_overrides exact key names** — for every cross-service URL variable in the findings, add an entry using the EXACT key name. Do NOT rename or guess keys.
    ```yaml
-   # If .env has VITE_API_BASE_URL=http://localhost:3000
+   # Findings say: VITE_API_BASE_URL → backend
    env_overrides:
-     VITE_API_BASE_URL: "{{backend.url}}"    # ← exact key from .env
-   # NOT: VITE_API_URL: "{{backend.url}}"    # ← wrong key name, override won't replace
+     VITE_API_BASE_URL: "{{backend.url}}"
+   # NOT: VITE_API_URL: "{{backend.url}}"
    ```
 
-3. **Browser-consumed URLs** — variables prefixed with `VITE_*`, `NEXT_PUBLIC_*`, or `REACT_APP_*` are consumed by the browser. Use `{{svc.url}}` which resolves to the nginx subdomain when available. Server-consumed URLs (backend-to-backend) use `http://localhost:{{svc.port}}`.
+3. **Browser vs server URLs** — VITE_*, NEXT_PUBLIC_*, REACT_APP_* are browser-consumed → use `{{svc.url}}` (resolves to nginx subdomain). All other URL vars are server-consumed → use `http://localhost:{{svc.port}}`.
 
-Key things to encode:
-- `env_overrides` per service with templates (`{{self.port}}`, `{{svc.url}}`, `{{db.schema}}`)
-- `database.setup` / `database.teardown` commands for schema isolation
-- `database.image`, `container_port`, `env`, `readiness` for container isolation
-- `database.migrations` per service with the `run` command
-- `nginx.subdomain_pattern` — **must include `{name}`** so subdomains identify the feature. Derive from the naming convention chosen in Step 2:
-  - `branch_prefix: "feature/{name}"` → `subdomain_pattern: "{name}-{svc}.localhost"` (e.g., `auth-redesign-api.localhost`)
-  - `branch_prefix: "JIRA-{name}"` → `subdomain_pattern: "{name}-{svc}.localhost"` (e.g., `123-api.localhost`)
-  - The `{name}` is whatever the user passes to `wt create <slot> <name>` — it appears in both the branch and the subdomain.
-  - Do NOT use `{slot}` as a substitute for `{name}` — patterns like `f{slot}-{svc}.localhost` make subdomains unidentifiable.
-  - Use `nginx.subdomains` overrides for friendlier URLs on specific services (e.g., `fe: "{name}.localhost"`).
+4. **Subdomain pattern must include {name}** — default: `{name}-{svc}.localhost`. The {name} is what users pass to `wt create` (feature name or ticket ID). Do NOT use {slot} instead of {name}.
 
-### Step 4: Scaffold nginx
+5. **Every service needs port override** — every service must have its port env var in env_overrides (e.g., `PORT: "{{self.port}}"`) so slots get unique ports.
+
+6. **Infrastructure compose_file** — must be the path relative to the project root, not relative to a service directory.
+
+## Output
+
+Write the complete `.claude/worktree/worktree.yml` file using the Write tool. Include brief comments for non-obvious choices.
+```
+
+### Step 4: Verify and fix loop
+
+Run `wt verify` to validate the generated config:
+
+```bash
+.claude/bin/wt verify
+```
+
+This checks service paths, subdirs, template vars, and — critically — **scans `.env` files internally** (safe: only outputs key names and URL values, never secrets) to catch cross-service URLs missing from env_overrides.
+
+If `wt verify` reports errors or warnings, use `SendMessage` to the Generation agent with the verify output. The agent fixes `worktree.yml` in its preserved context. Repeat until clean.
+
+**IMPORTANT**: Do NOT read `.env` files yourself — they contain secrets. Let `wt verify` handle the scanning.
+
+### Step 5: Scaffold nginx
 
 Generate nginx config files from templates in [assets/](assets/):
 
@@ -181,27 +237,6 @@ Generate nginx config files from templates in [assets/](assets/):
 ```
 
 Then add to `.gitignore`: `.worktrees/`, `.env.overrides`
-
-For URL resolution in env_overrides, see [references/url-resolution.md](references/url-resolution.md).
-For database isolation implementation, see [references/db-isolation.md](references/db-isolation.md).
-
-### Step 5: Verify
-
-Run `wt verify` to validate the generated `worktree.yml` against the actual project:
-
-```bash
-.claude/bin/wt verify
-```
-
-This checks:
-- Service paths resolve to directories with `.git`
-- Subdirs exist within repos
-- `env_overrides` template vars reference defined services
-- **Cross-service URL detection**: the binary internally reads `.env` files (safe — it only outputs key names and URL values, never secrets) and flags `localhost:PORT` URLs that match other services' `port_base` but are missing from `env_overrides`
-
-If `wt verify` reports warnings about missing env_overrides, add the suggested entries to `worktree.yml` and re-run until clean.
-
-**IMPORTANT**: Do NOT read `.env` files yourself — they contain secrets. Let `wt verify` handle the scanning. You should only ever read `.env.sample` or `.env.example`.
 
 ---
 

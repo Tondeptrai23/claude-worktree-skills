@@ -64,7 +64,7 @@ func runCreate(c *cli.Context) error {
 		return fmt.Errorf("slot %d already in use — run 'wt destroy %d' first", slotNum, slotNum)
 	}
 
-	fmt.Printf("\033[32m[*]\033[0m Creating feature slot %d: '%s'\n", slotNum, name)
+	PrintInfo("Creating feature slot %d: '%s'\n", slotNum, name)
 	os.MkdirAll(slotDir, 0755)
 
 	// Create git worktrees — group by repo to avoid duplicates
@@ -87,12 +87,12 @@ func runCreate(c *cli.Context) error {
 
 		repoDir := filepath.Join(rootDir, svc.Path)
 		if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
-			fmt.Printf("\033[33m[!]\033[0m Skipping %s: no git repo at %s\n", svcName, repoDir)
+			PrintWarn("Skipping %s: no git repo at %s\n", svcName, repoDir)
 			continue
 		}
 
 		targetDir := filepath.Join(slotDir, repoKey)
-		fmt.Printf("\033[32m[*]\033[0m Creating %s/ worktree on branch '%s'\n", repoKey, branch)
+		PrintInfo("Creating %s/ worktree on branch '%s'\n", repoKey, branch)
 
 		if err := gitops.CreateWorktree(repoDir, targetDir, branch); err != nil {
 			return fmt.Errorf("creating worktree for %s: %w", repoKey, err)
@@ -100,7 +100,7 @@ func runCreate(c *cli.Context) error {
 
 		// Write git excludes for runtime files so they don't appear in git status
 		if err := gitops.WriteWorktreeExcludes(targetDir); err != nil {
-			fmt.Printf("\033[33m[!]\033[0m Could not write git excludes for %s: %v\n", repoKey, err)
+			PrintWarn("Could not write git excludes for %s: %v\n", repoKey, err)
 		}
 
 		createdRepos[repoKey] = true
@@ -122,7 +122,7 @@ func runCreate(c *cli.Context) error {
 	}
 
 	// Generate env overrides
-	fmt.Println("\033[32m[*]\033[0m Generating environment override files")
+	PrintInfo("Generating environment override files\n")
 	if err := envgen.GenerateOverrides(slotNum, name, cfg, slotDir); err != nil {
 		return fmt.Errorf("generating env overrides: %w", err)
 	}
@@ -143,14 +143,14 @@ func runCreate(c *cli.Context) error {
 		}
 
 		workDir := svc.WorkDir(slotDir)
-		fmt.Printf("\033[32m[*]\033[0m Installing dependencies for %s\n", svcName)
+		PrintInfo("Installing dependencies for %s\n", svcName)
 
 		installCmd := template.Resolve(mode.Install, svcName, slotNum, name, cfg)
 		cmd := exec.Command("bash", "-c", installCmd)
 		cmd.Dir = workDir
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			fmt.Printf("\033[33m[!]\033[0m Install failed for %s: %s\n", svcName, string(out))
+			PrintWarn("Install failed for %s: %s\n", svcName, string(out))
 		}
 
 		installedRepos[repoKey] = true
@@ -158,15 +158,15 @@ func runCreate(c *cli.Context) error {
 
 	// Run database setup → seed → migrations
 	if cfg.Database.Isolation != "none" && cfg.Database.Isolation != "" {
-		fmt.Printf("\033[32m[*]\033[0m Running database setup for slot %d\n", slotNum)
+		PrintInfo("Running database setup for slot %d\n", slotNum)
 		if err := db.Setup(cfg, slotNum); err != nil {
-			fmt.Printf("\033[33m[!]\033[0m Database setup failed: %v\n", err)
+			PrintWarn("Database setup failed: %v\n", err)
 		} else {
 			if err := db.RunSeed(cfg, slotNum, rootDir); err != nil {
-				fmt.Printf("\033[33m[!]\033[0m Seed script failed: %v\n", err)
+				PrintWarn("Seed script failed: %v\n", err)
 			}
 			if err := db.RunMigrations(cfg, slotNum, slotDir); err != nil {
-				fmt.Printf("\033[33m[!]\033[0m Migration failed: %v\n", err)
+				PrintWarn("Migration failed: %v\n", err)
 			}
 		}
 	}
@@ -181,7 +181,8 @@ func runCreate(c *cli.Context) error {
 		svcNames = append(svcNames, name)
 	}
 
-	fmt.Printf("\n\033[32m[OK]\033[0m Feature slot %d created: '%s'\n", slotNum, name)
+	fmt.Println()
+	PrintOK("Feature slot %d created: '%s'\n", slotNum, name)
 	fmt.Printf("  Services: %s\n", strings.Join(svcNames, ", "))
 	fmt.Printf("  Path: %s\n", slotDir)
 

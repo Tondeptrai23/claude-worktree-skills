@@ -42,7 +42,7 @@ func runInstall(c *cli.Context) error {
 	binDir := filepath.Join(claudeDir, "bin")
 
 	// 1. Extract skill files (clean install — remove old files first)
-	fmt.Println("\033[32m[*]\033[0m Installing skills...")
+	PrintInfo("Installing skills...\n")
 
 	// Remove previous skill directories so stale files don't linger
 	for _, dir := range []string{"worktree", "worktree-agent"} {
@@ -83,10 +83,10 @@ func runInstall(c *cli.Context) error {
 		return fmt.Errorf("extracting skills: %w", err)
 	}
 
-	fmt.Println("\033[32m[OK]\033[0m Installed skills to", skillsDir)
+	PrintOK("Installed skills to %s\n", skillsDir)
 
 	// 2. Copy self to .claude/bin/wt
-	fmt.Println("\033[32m[*]\033[0m Installing wt CLI...")
+	PrintInfo("Installing wt CLI...\n")
 
 	os.MkdirAll(binDir, 0755)
 	selfPath, err := os.Executable()
@@ -103,11 +103,11 @@ func runInstall(c *cli.Context) error {
 		return fmt.Errorf("writing %s: %w", wtPath, err)
 	}
 
-	fmt.Println("\033[32m[OK]\033[0m Installed", wtPath)
+	PrintOK("Installed %s\n", wtPath)
 
 	// 3. Update settings.local.json
 	if err := updateSettings(claudeDir); err != nil {
-		fmt.Printf("\033[33m[!]\033[0m Could not update settings: %v\n", err)
+		PrintWarn("Could not update settings: %v\n", err)
 	}
 
 	// 4. Update .gitignore
@@ -115,15 +115,15 @@ func runInstall(c *cli.Context) error {
 	ensureGitignore(gitignorePath, ".claude/bin/")
 	ensureGitignore(gitignorePath, ".worktrees/")
 	ensureGitignore(gitignorePath, ".env.overrides")
-	fmt.Println("\033[32m[OK]\033[0m Updated .gitignore")
+	PrintOK("Updated .gitignore\n")
 
 	// 5. Update CLAUDE.md
 	if err := updateClaudeMD(projectRoot); err != nil {
-		fmt.Printf("\033[33m[!]\033[0m Could not update CLAUDE.md: %v\n", err)
+		PrintWarn("Could not update CLAUDE.md: %v\n", err)
 	}
 
 	fmt.Println()
-	fmt.Println("\033[32m[OK]\033[0m Worktree skills installed.")
+	PrintOK("Worktree skills installed.\n")
 	fmt.Println()
 	fmt.Println("  Skills:", skillsDir)
 	fmt.Println("  CLI:   ", wtPath)
@@ -179,7 +179,7 @@ func updateSettings(claudeDir string) error {
 		return err
 	}
 
-	fmt.Println("\033[32m[OK]\033[0m Updated settings.local.json")
+	PrintOK("Updated settings.local.json\n")
 	return nil
 }
 
@@ -220,13 +220,13 @@ func updateClaudeMD(projectRoot string) error {
 		}
 		defer f.Close()
 		fmt.Fprintf(f, "\n## Worktree\n\nThe `wt` CLI is at `.claude/bin/wt`. Use `/worktree` to bootstrap worktree config for this project.\n")
-		fmt.Println("\033[32m[OK]\033[0m Appended worktree section to CLAUDE.md")
+		PrintOK("Appended worktree section to CLAUDE.md\n")
 	} else {
 		content := "# Project Notes\n\n## Worktree\n\nThe `wt` CLI is at `.claude/bin/wt`. Use `/worktree` to bootstrap worktree config for this project.\n"
 		if err := os.WriteFile(claudeMD, []byte(content), 0644); err != nil {
 			return err
 		}
-		fmt.Println("\033[32m[OK]\033[0m Created CLAUDE.md")
+		PrintOK("Created CLAUDE.md\n")
 	}
 	return nil
 }
