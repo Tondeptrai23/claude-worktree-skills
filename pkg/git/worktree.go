@@ -79,6 +79,27 @@ func WriteWorktreeExcludes(worktreeDir string) error {
 	return os.WriteFile(excludePath, []byte(patterns), 0644)
 }
 
+// WorktreeHasBranch checks if a branch is already checked out in any worktree.
+// Returns the worktree path if found, or empty string if not.
+func WorktreeHasBranch(rootDir, svcPath, branch string) string {
+	repoDir := filepath.Join(rootDir, svcPath)
+	out, err := exec.Command("git", "-C", repoDir, "worktree", "list", "--porcelain").Output()
+	if err != nil {
+		return ""
+	}
+
+	var currentPath string
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			currentPath = strings.TrimPrefix(line, "worktree ")
+		}
+		if strings.HasPrefix(line, "branch refs/heads/"+branch) {
+			return currentPath
+		}
+	}
+	return ""
+}
+
 // PruneWorktrees cleans up stale worktree references.
 func PruneWorktrees(repoDir string) {
 	exec.Command("git", "-C", repoDir, "worktree", "prune").Run()

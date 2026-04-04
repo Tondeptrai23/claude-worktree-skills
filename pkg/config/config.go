@@ -231,6 +231,11 @@ func (c *Config) FindNginxDir(rootDir string) string {
 	return filepath.Join(rootDir, ".claude", "worktree", "nginx")
 }
 
+// ResolveBranch returns the branch name for a given feature name.
+func (c *Config) ResolveBranch(name string) string {
+	return strings.ReplaceAll(c.BranchPrefix, "{name}", name)
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil

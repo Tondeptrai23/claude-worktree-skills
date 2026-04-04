@@ -67,7 +67,7 @@ for implementation. This gives you dedicated ports, running services, and
 test URLs without affecting the main checkout.
 
 ### Setup (before implementing)
-1. Find a free slot: `ls .worktrees/` to see which slots are taken (1-3)
+1. Find a free slot: `.claude/bin/wt next-slot`
 2. Create: `.claude/bin/wt create $SLOT $FEATURE_NAME --services $SERVICES`
 3. Start: `.claude/bin/wt start $SLOT`
    (nginx and env merge happen automatically)

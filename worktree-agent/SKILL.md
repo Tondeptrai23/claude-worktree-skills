@@ -61,26 +61,15 @@ Before doing anything, verify:
 
 4. **Slot allocation** — if `--slot` not specified, find the first free slot:
    ```bash
-   for n in $(seq 1 $MAX_SLOTS); do
-       [[ ! -d .worktrees/slot-${n} ]] && echo "$n" && break
-   done
+   .claude/bin/wt next-slot
    ```
-   If all slots are occupied, run `.claude/bin/wt status` and ask user to destroy one.
+   Prints the slot number, or exits with an error if all slots are occupied. If all slots are occupied, run `.claude/bin/wt status` and ask the user to destroy one.
 
-5. **Quick health checks** (fail fast):
-   - Disk space: `df --output=avail . | tail -1` — warn if < 5GB
-   - Port conflicts: for each service in the slot, check if the port is already in use
-   - Branch: check if the branch is already checked out in another worktree:
-     ```bash
-     git -C SERVICE_DIR worktree list | grep BRANCH
-     ```
-   - Docker: `docker info >/dev/null 2>&1` — required if DB containers or nginx are used
-
-6. **Staleness check** — compare `.env.sample` mtime against `worktree.yml` mtime. If any .env.sample is newer, warn about re-running bootstrap.
-
-7. **`.env` file access** — check that `.env` or `.env.sample` exists for each service. Warn if only `.env.sample` exists (secrets will be empty).
-
-If any critical check fails, report the issue and stop.
+5. **Pre-flight checks** — run all checks in one command:
+   ```bash
+   .claude/bin/wt preflight $SLOT $FEATURE_NAME
+   ```
+   This checks disk space, port availability, branch conflicts, Docker status, nginx, and slot availability. If any critical check fails, report the issue and stop.
 
 ### Step 1: Create the worktree
 
@@ -100,27 +89,17 @@ If the command fails, report the error and clean up.
 
 This auto-starts nginx if not running (finding an available port if needed), merges env files (secrets + overrides), then launches the services.
 
-### Step 2b: Verify nginx is running
-
-After `wt start`, confirm nginx is actually up:
-```bash
-docker ps --format '{{.Names}}' | grep feature-router && echo "nginx up" || echo "nginx down"
-```
-
-If nginx is down, the subdomain URLs won't work. Report this to the user and use direct `localhost:{port}` URLs in the agent prompt instead. If nginx is up, use the subdomain URLs as primary test URLs.
-
 ### Step 3: Wait for services to be healthy
 
-For each started service, poll its health endpoint (or check the port is listening):
+After starting, verify all services are responding and get the test URLs:
 
 ```bash
-for attempt in $(seq 1 30); do
-    curl -sf http://localhost:$PORT/health > /dev/null 2>&1 && break
-    sleep 2
-done
+.claude/bin/wt health $SLOT
 ```
 
-If a service doesn't come up within 60 seconds, check its log:
+This waits for each service to accept connections (up to 60s), checks nginx routing, and prints the test URLs (both nginx subdomains and direct ports). Use the URLs from this output in the agent prompt.
+
+If a service fails, check its log:
 ```bash
 .claude/bin/wt logs $SLOT $SERVICE
 ```

@@ -15,6 +15,27 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+func NextSlotCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "next-slot",
+		Usage: "Print the next available slot number",
+		Action: func(c *cli.Context) error {
+			cfg := c.App.Metadata["config"].(*config.Config)
+			rootDir := c.App.Metadata["rootDir"].(string)
+
+			for n := 1; n <= cfg.MaxSlots; n++ {
+				slotDir := config.SlotDir(rootDir, n)
+				if _, err := os.Stat(slotDir); os.IsNotExist(err) {
+					fmt.Println(n)
+					return nil
+				}
+			}
+
+			return fmt.Errorf("all %d slots are occupied — run 'wt status' to review", cfg.MaxSlots)
+		},
+	}
+}
+
 func StatusCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "status",

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(bash -n /mnt/NewVolume1/DevTest/RealProject/claude-worktree-skills/install.sh)",
+      "Bash(bash -n /mnt/NewVolume1/DevTest/RealProject/claude-worktree-skills/worktree/assets/feature-worktree.sh.template)",
+      "Bash(bash -n /mnt/NewVolume1/DevTest/RealProject/claude-worktree-skills/worktree/assets/nginx-gen.sh.template)",
+      "Bash(go vet:*)",
+      "Bash(go run:*)"
+    ]
+  }
+}

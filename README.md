@@ -28,12 +28,16 @@ Creates worktree, starts services, provides nginx-routed test URLs (`http://f1.l
 Requires Go 1.23+. From your **project root**:
 
 ```bash
+go run github.com/Tondeptrai23/claude-worktree-skills@main install
+```
+
+**To update** (bypasses Go's module proxy cache to get the latest):
+
+```bash
 GONOPROXY=github.com/Tondeptrai23/* go run github.com/Tondeptrai23/claude-worktree-skills@main install
 ```
 
-This downloads the latest source directly from GitHub (bypassing Go's module proxy cache), builds the `wt` CLI, and installs skills + binary into your project.
-
-To update, run the same command again — it cleanly replaces old files.
+This builds the `wt` CLI and installs skills + binary into your project. Re-running cleanly replaces old files.
 
 ## How It Works
 
