@@ -238,6 +238,42 @@ Generate nginx config files from templates in [assets/](assets/):
 
 Then add to `.gitignore`: `.worktrees/`, `.env.overrides`
 
+### Step 6: Smoke test
+
+Validate the full create → start → health → destroy lifecycle using a throwaway slot. This proves `/worktree-agent` will work before the user needs it.
+
+Run each command as a **separate Bash call** and capture output:
+
+```bash
+.claude/bin/wt preflight 1 smoke-test
+```
+```bash
+.claude/bin/wt create 1 smoke-test
+```
+```bash
+.claude/bin/wt start 1
+```
+```bash
+.claude/bin/wt health 1
+```
+
+Then read the last 50 lines of each service log for startup errors:
+
+```bash
+tail -n 50 .worktrees/slot-1/.logs/*.log
+```
+
+Flag any ERROR, WARN, exception stack traces, or port-binding failures. A healthy service should show a startup-complete message (e.g. "Listening on port …", "Application is running", "ready in …ms").
+
+Then tear down **regardless of whether health passed or failed**:
+
+```bash
+.claude/bin/wt stop 1
+.claude/bin/wt destroy 1
+```
+
+Report pass/fail for each step. If any step failed, surface the error and tell the user to fix it before using `/worktree-agent`. Do NOT leave the slot running or skip destroy.
+
 ---
 
 ## Slot Operations
