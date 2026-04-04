@@ -109,7 +109,7 @@ Report the error and ask the user how to proceed.
 
 Use the Agent tool to spawn an agent. **Do NOT use `isolation: "worktree"`** — we already set up the worktree with full infrastructure. Instead, spawn a regular agent that works in the worktree directory.
 
-Read `worktree.yml` to build the test URLs for the agent prompt. The nginx subdomain pattern tells you the URLs (default: `{name}.{svc}.localhost`).
+**IMPORTANT**: Use the URLs printed by `wt health` in Step 3 for the agent prompt. Do NOT construct URLs yourself — `wt health` outputs the correct nginx subdomain URLs and direct ports based on the resolved config. Copy them exactly.
 
 **Agent prompt structure:**
 
@@ -126,17 +126,12 @@ You are implementing a feature in a worktree environment with running services.
 Each service has its own subdirectory:
 {for each service in slot:}
   - {service}: {.worktrees/slot-N/repo_key/subdir/}
-    Port: {port}
     Logs: .claude/bin/wt logs {N} {service}
 
 ## Test URLs
-Your changes are served at these URLs (via nginx):
-{for each exposed service:}
-  - {service}: http://{name}.{svc}.localhost:{nginx_port}
-
-Direct ports (bypass nginx):
-{for each service:}
-  - {service}: http://localhost:{port}
+{paste the exact URLs from `wt health` output — these are the correct URLs}
+{example format:}
+  - {service}: {nginx_url} (direct: localhost:{port})
 
 ## Database
 {if isolation == "schema":}
@@ -193,23 +188,19 @@ When the agent completes:
    ```
 3. Show test URLs for manual verification
 
-### Step 6: Cleanup decision
+### Step 6: Report and keep running
 
-If `--keep` was specified, leave everything running and tell the user:
+Always leave the worktree running after the agent finishes. Tell the user:
 ```
-Worktree slot {N} is still running. When done testing:
+Worktree slot {N} is running. Test URLs:
+  {URLs from wt health}
+
+When done:
   .claude/bin/wt stop {N}
   .claude/bin/wt destroy {N}
 ```
 
-If `--keep` was NOT specified, ask the user:
-```
-Agent finished. What would you like to do?
-  1. Keep worktree running for manual testing
-  2. Destroy worktree (stop services, remove branch, clean up)
-```
-
-Use `AskUserQuestion` for this.
+Use `AskUserQuestion` to ask what the user wants to do next (e.g., review changes, run tests, create PR). Do NOT suggest destroying the worktree — the user will decide when they're ready.
 
 ---
 

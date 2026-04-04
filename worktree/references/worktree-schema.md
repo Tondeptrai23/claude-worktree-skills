@@ -38,13 +38,13 @@ private_files:
 nginx:
   enabled: true
   port: 80
-  # Subdomain pattern. {slot} is replaced with slot number.
-  # {svc} is replaced with service key.
-  subdomain_pattern: "f{slot}-{svc}.localhost"
+  # Subdomain pattern. Must include {name} so subdomains identify the feature.
+  # Placeholders: {name} = feature name, {svc} = service key, {slot} = slot number
+  subdomain_pattern: "{name}-{svc}.localhost"
   # Override per-service subdomain (optional)
   subdomains:
-    fe-app: "f{slot}.localhost"        # shorter URL for main frontend
-    be: "f{slot}-api.localhost"
+    fe-app: "{name}.localhost"          # shorter URL for main frontend
+    be: "{name}-api.localhost"
 
 # CORS audit results (documented during bootstrap)
 # This section records findings so future runs don't re-audit.

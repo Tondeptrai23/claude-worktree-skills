@@ -101,15 +101,32 @@ Questions:
   1. Are these all the services, or did I miss any?
   2. Dev mode (host processes) or Docker mode?
   3. Schema isolation OK, or prefer separate DB containers?
-  4. What branch naming convention do you use?
-     Examples: feature/{name}, {name}, JIRA-{ticket}-{name}
-     (default: feature/{name})
+  4. What naming convention do you use for features/branches?
+     This determines both branch names AND nginx subdomains.
+
+     a) feature/{name}  (default)
+        wt create 1 auth-redesign
+        → branch: feature/auth-redesign
+        → URLs:   auth-redesign-api.localhost, auth-redesign.localhost
+
+     b) {name}  (plain)
+        wt create 1 auth-redesign
+        → branch: auth-redesign
+        → URLs:   auth-redesign-api.localhost
+
+     c) JIRA-{name}  (ticket ID)
+        wt create 1 123
+        → branch: JIRA-123
+        → URLs:   123-api.localhost, 123.localhost
+
+     d) Custom: ___
+
   5. Should I copy the private files listed above to worktrees?
 ```
 
 **You CAN infer** (don't ask): framework defaults (Spring Boot=8080, Vite=5173), common env patterns (`DATABASE_URL`, `API_URL`), git topology, browser-consumed env vars.
 
-**You MUST ask** (don't guess): which directories are services, unclear port assignments, cross-service URL mappings that aren't obvious, database isolation preference, branch naming convention.
+**You MUST ask** (don't guess): which directories are services, unclear port assignments, cross-service URL mappings that aren't obvious, database isolation preference, naming convention.
 
 ### Step 3: Generate `worktree.yml`
 
@@ -145,7 +162,12 @@ Key things to encode:
 - `database.setup` / `database.teardown` commands for schema isolation
 - `database.image`, `container_port`, `env`, `readiness` for container isolation
 - `database.migrations` per service with the `run` command
-- `nginx.subdomain_pattern` — default: `{name}.{svc}.localhost`
+- `nginx.subdomain_pattern` — **must include `{name}`** so subdomains identify the feature. Derive from the naming convention chosen in Step 2:
+  - `branch_prefix: "feature/{name}"` → `subdomain_pattern: "{name}-{svc}.localhost"` (e.g., `auth-redesign-api.localhost`)
+  - `branch_prefix: "JIRA-{name}"` → `subdomain_pattern: "{name}-{svc}.localhost"` (e.g., `123-api.localhost`)
+  - The `{name}` is whatever the user passes to `wt create <slot> <name>` — it appears in both the branch and the subdomain.
+  - Do NOT use `{slot}` as a substitute for `{name}` — patterns like `f{slot}-{svc}.localhost` make subdomains unidentifiable.
+  - Use `nginx.subdomains` overrides for friendlier URLs on specific services (e.g., `fe: "{name}.localhost"`).
 
 ### Step 4: Scaffold nginx
 
