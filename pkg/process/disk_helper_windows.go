@@ -1,14 +1,15 @@
 //go:build windows
 
-package cmd
+package process
 
 import (
+	"fmt"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-func checkDisk(hasErrors *bool) {
+func AvailableDiskGB() (int64, error) {
 	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
 	getDiskFreeSpaceEx := kernel32.NewProc("GetDiskFreeSpaceExW")
 
@@ -21,14 +22,9 @@ func checkDisk(hasErrors *bool) {
 		0,
 	)
 	if ret == 0 {
-		PrintWarn("Could not check disk space: %v\n", err)
-		return
+		return 0, fmt.Errorf("failed to check disk space: %v", err)
 	}
 
 	availGB := int64(freeBytesAvailable / 1024 / 1024 / 1024)
-	if availGB < 5 {
-		PrintWarn("Disk: %d GB available (< 5 GB)\n", availGB)
-	} else {
-		PrintOK("Disk: %d GB available\n", availGB)
-	}
+	return availGB, nil
 }

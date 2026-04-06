@@ -17,7 +17,7 @@ func Spawn(workDir, command string, env map[string]string, logPath, pidPath stri
 		return fmt.Errorf("creating log file: %w", err)
 	}
 
-	cmd := shellCommand(command)
+	cmd := Command(command)
 	cmd.Dir = workDir
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -50,6 +50,3 @@ func Spawn(workDir, command string, env map[string]string, logPath, pidPath stri
 
 	return nil
 }
-
-// shellCommand and setSysProcAttr are defined in platform-specific files:
-// spawn_unix.go and spawn_windows.go

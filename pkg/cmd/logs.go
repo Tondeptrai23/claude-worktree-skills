@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/process"
 
 	"github.com/urfave/cli/v2"
 )
@@ -69,8 +70,29 @@ func runLogs(c *cli.Context) error {
 
 	printLogsHeader(slotNum, logFiles)
 
-	// tailFiles is defined in tail_unix.go and tail_windows.go
-	return tailFiles(logFiles, fileColors)
+	// Convert to interface map for process.TailFiles
+	colorMap := colorMap(fileColors)
+
+	// Wrap SprintColor to match LineLogger signature
+	lineLogger := func(color interface{}, args ...any) {
+		if c, ok := color.(Color); ok {
+			fmt.Println(SprintColor(c, "[%s] %s", args...))
+			return
+		}
+		// Fallback: use default color
+		fmt.Println(SprintColor(ColorCyan, "[%s] %s", args...))
+
+	}
+
+	return process.TailFiles(logFiles, colorMap, lineLogger)
+}
+
+func colorMap(fileColors map[string]Color) map[string]interface{} {
+	m := make(map[string]interface{}, len(fileColors))
+	for k, v := range fileColors {
+		m[k] = v
+	}
+	return m
 }
 
 func printLogsHeader(slotNum int, logFiles []string) {

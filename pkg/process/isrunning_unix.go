@@ -6,7 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // IsRunning checks if a PID file exists and the process is alive.
@@ -22,6 +23,6 @@ func IsRunning(pidPath string) (int, bool) {
 	}
 
 	// Signal 0 checks existence without sending a signal
-	err = syscall.Kill(pid, 0)
+	err = unix.Kill(pid, 0)
 	return pid, err == nil
 }

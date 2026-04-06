@@ -1,8 +1,9 @@
 //go:build windows
 
-package cmd
+package process
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -12,15 +13,15 @@ import (
 	"time"
 )
 
-// tailFiles tails multiple log files using a pure Go polling approach.
-func tailFiles(logFiles []string, fileColors map[string]Color) error {
+// tailFilesImpl tails multiple log files using polling (Windows).
+func tailFilesImpl(logFiles []string, fileColors map[string]interface{}, logger LineLogger) error {
 	var wg sync.WaitGroup
 
 	for _, logFile := range logFiles {
 		wg.Add(1)
 		go func(path string) {
 			defer wg.Done()
-			tailOneFile(path, fileColors)
+			tailOneFile(path, fileColors, logger)
 		}(logFile)
 	}
 
@@ -29,7 +30,7 @@ func tailFiles(logFiles []string, fileColors map[string]Color) error {
 	return nil
 }
 
-func tailOneFile(path string, fileColors map[string]Color) {
+func tailOneFile(path string, fileColors map[string]interface{}, logger LineLogger) {
 	f, err := os.Open(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot open %s: %v\n", path, err)
@@ -41,18 +42,13 @@ func tailOneFile(path string, fileColors map[string]Color) {
 	f.Seek(0, io.SeekEnd)
 
 	svc := strings.TrimSuffix(filepath.Base(path), ".log")
-	color, ok := fileColors[path]
-	if !ok {
-		color = ColorCyan
-	}
+	color := fileColors[path]
 
-	buf := make([]byte, 4096)
+	reader := bufio.NewReader(f)
 	for {
-		n, err := f.Read(buf)
-		if n > 0 {
-			// Print service header and content
-			fmt.Print(SprintColor(color, "[%s] ", svc))
-			fmt.Print(string(buf[:n]))
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 && err == nil {
+			logger(color, svc, line)
 		}
 		if err == io.EOF {
 			time.Sleep(200 * time.Millisecond)
