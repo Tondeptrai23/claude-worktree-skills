@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -94,7 +95,11 @@ func runInstall(c *cli.Context) error {
 		return fmt.Errorf("finding self: %w", err)
 	}
 
-	wtPath := filepath.Join(binDir, "wt")
+	binName := "wt"
+	if runtime.GOOS == "windows" {
+		binName = "wt.exe"
+	}
+	wtPath := filepath.Join(binDir, binName)
 	selfData, err := os.ReadFile(selfPath)
 	if err != nil {
 		return fmt.Errorf("reading self: %w", err)

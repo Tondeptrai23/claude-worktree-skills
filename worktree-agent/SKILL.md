@@ -162,6 +162,16 @@ If your feature needs a NEW environment variable:
      .claude/bin/wt start {N} --services {service}
   3. Do NOT modify .env files directly — they are overwritten on every restart
 
+## On Repeated Failure
+If the same action fails twice in a row, before reporting the blocker:
+1. Append a concise lesson to `.claude/skills/worktree-agent/SKILL.md` under `## Lessons Learned`:
+   - What failed (specific error or symptom)
+   - What NOT to do
+   - What works instead (if discovered)
+2. Then report the blocker
+
+Keep lessons to one bullet per failure pattern. Do not duplicate existing lessons.
+
 ## Rules
 - Only modify files within your working directory
 - Do NOT modify files in the main checkout
@@ -258,3 +268,10 @@ When a background agent finishes, you will be automatically notified. On notific
 - **Services auto-reload** — Vite HMR, Spring DevTools, uvicorn `--reload`. The agent should NOT restart services after code changes.
 - **The agent works in the worktree directory**, not the project root.
 - **Background agents imply `--keep`** — never auto-destroy a worktree from a background agent.
+
+---
+
+## Lessons Learned
+
+*Accumulated by agents at runtime. Do not edit manually.*
+

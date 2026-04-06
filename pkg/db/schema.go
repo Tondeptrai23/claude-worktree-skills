@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/shell"
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/template"
 )
 
@@ -98,7 +99,7 @@ func RunSeed(cfg *config.Config, slot int, rootDir string) error {
 	}
 
 	resolved := template.Resolve(scriptPath, "", slot, "", cfg)
-	cmd := exec.Command("bash", resolved)
+	cmd := shell.Command(resolved)
 	cmd.Dir = rootDir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("seed script failed: %w\n%s", err, out)
@@ -121,7 +122,7 @@ func RunMigrations(cfg *config.Config, slot int, slotDir string) error {
 		resolved := template.Resolve(migration.Run, svcName, slot, "", cfg)
 
 		fmt.Printf("\033[32m[*]\033[0m Running %s migration (%s)\n", svcName, migration.Tool)
-		cmd := exec.Command("bash", "-c", resolved)
+		cmd := shell.Command(resolved)
 		cmd.Dir = workDir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("migration for %s failed: %w\n%s", svcName, err, out)
@@ -131,7 +132,7 @@ func RunMigrations(cfg *config.Config, slot int, slotDir string) error {
 }
 
 func runShell(command string) error {
-	cmd := exec.Command("bash", "-c", command)
+	cmd := shell.Command(command)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("db command failed: %w\n%s", err, out)

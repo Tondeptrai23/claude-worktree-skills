@@ -3,11 +3,8 @@ package process
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
-	"syscall"
 )
 
 // Spawn starts a background process and tracks its PID.
@@ -20,7 +17,7 @@ func Spawn(workDir, command string, env map[string]string, logPath, pidPath stri
 		return fmt.Errorf("creating log file: %w", err)
 	}
 
-	cmd := exec.Command("bash", "-c", command)
+	cmd := shellCommand(command)
 	cmd.Dir = workDir
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -32,9 +29,7 @@ func Spawn(workDir, command string, env map[string]string, logPath, pidPath stri
 	}
 
 	// Create new process group so we can kill the entire tree
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
+	setSysProcAttr(cmd)
 
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
@@ -56,19 +51,5 @@ func Spawn(workDir, command string, env map[string]string, logPath, pidPath stri
 	return nil
 }
 
-// IsRunning checks if a PID file exists and the process is alive.
-func IsRunning(pidPath string) (int, bool) {
-	data, err := os.ReadFile(pidPath)
-	if err != nil {
-		return 0, false
-	}
-
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil {
-		return 0, false
-	}
-
-	// Signal 0 checks existence without sending a signal
-	err = syscall.Kill(pid, 0)
-	return pid, err == nil
-}
+// shellCommand and setSysProcAttr are defined in platform-specific files:
+// spawn_unix.go and spawn_windows.go

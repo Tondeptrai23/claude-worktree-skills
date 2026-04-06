@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strconv"
 
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
 	gitops "github.com/Tondeptrai23/claude-worktree-skills/pkg/git"
@@ -65,27 +64,7 @@ func runPreflight(c *cli.Context) error {
 	return nil
 }
 
-func checkDisk(hasErrors *bool) {
-	out, err := exec.Command("df", "--output=avail", ".").Output()
-	if err != nil {
-		PrintWarn("Could not check disk space: %v\n", err)
-		return
-	}
-	lines := bytes.Split(bytes.TrimSpace(out), []byte("\n"))
-	if len(lines) < 2 {
-		return
-	}
-	avail, err := strconv.ParseInt(string(bytes.TrimSpace(lines[1])), 10, 64)
-	if err != nil {
-		return
-	}
-	availGB := avail / 1024 / 1024
-	if availGB < 5 {
-		PrintWarn("Disk: %d GB available (< 5 GB)\n", availGB)
-	} else {
-		PrintOK("Disk: %d GB available\n", availGB)
-	}
-}
+// checkDisk is defined in disk_unix.go and disk_windows.go
 
 func checkPorts(slot int, cfg *config.Config, hasErrors *bool) {
 	for svcName, svc := range cfg.Services {

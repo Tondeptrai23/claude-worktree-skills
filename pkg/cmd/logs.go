@@ -1,12 +1,9 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
 
@@ -72,37 +69,8 @@ func runLogs(c *cli.Context) error {
 
 	printLogsHeader(slotNum, logFiles)
 
-	// Run tail as a subprocess so we can color its output
-	cmd := exec.Command("tail", append([]string{"-f"}, logFiles...)...)
-	cmd.Stderr = os.Stderr
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "==>") && strings.HasSuffix(line, "<==") {
-			// Extract the file path from "==> /path/to/backend.log <=="
-			inner := strings.TrimPrefix(strings.TrimSuffix(line, " <=="), "==> ")
-			color, ok := fileColors[inner]
-			if !ok {
-				color = ColorCyan
-			}
-			svc := strings.TrimSuffix(filepath.Base(inner), ".log")
-			fmt.Println(SprintColor(color, "====== ■ %s ■ ======", svc))
-			fmt.Println(line)
-		} else {
-			fmt.Println(line)
-		}
-	}
-
-	return cmd.Wait()
+	// tailFiles is defined in tail_unix.go and tail_windows.go
+	return tailFiles(logFiles, fileColors)
 }
 
 func printLogsHeader(slotNum int, logFiles []string) {
