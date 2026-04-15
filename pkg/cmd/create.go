@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/config"
-	"github.com/Tondeptrai23/claude-worktree-skills/pkg/shell"
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/db"
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/envgen"
 	gitops "github.com/Tondeptrai23/claude-worktree-skills/pkg/git"
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/nginx"
+	"github.com/Tondeptrai23/claude-worktree-skills/pkg/process"
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/slot"
 	"github.com/Tondeptrai23/claude-worktree-skills/pkg/template"
 
@@ -146,7 +146,7 @@ func runCreate(c *cli.Context) error {
 		PrintInfo("Installing dependencies for %s\n", svcName)
 
 		installCmd := template.Resolve(mode.Install, svcName, slotNum, name, cfg)
-		cmd := shell.Command(installCmd)
+		cmd := process.Command(installCmd)
 		cmd.Dir = workDir
 		out, err := cmd.CombinedOutput()
 		if err != nil {
