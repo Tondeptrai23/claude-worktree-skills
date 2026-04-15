@@ -28,8 +28,9 @@ func InstallCommand() *cli.Command {
 }
 
 func runInstall(c *cli.Context) error {
-	// Must be in a git repo root
-	if _, err := os.Stat(".git"); os.IsNotExist(err) {
+	// Must be in a project root — either a mono-repo (.git at root) or a
+	// multi-repo (subdirectories each have their own .git).
+	if !hasGitRoot(".") {
 		return fmt.Errorf("run this from your project root (no .git directory found)")
 	}
 
@@ -136,6 +137,26 @@ func runInstall(c *cli.Context) error {
 	fmt.Println("  Next:   Open Claude Code and run /worktree to bootstrap your project.")
 	fmt.Println()
 	return nil
+}
+
+// hasGitRoot returns true if dir itself contains a .git entry (mono-repo) or
+// any of its direct subdirectories do (multi-repo).
+func hasGitRoot(dir string) bool {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		return true
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			if _, err := os.Stat(filepath.Join(dir, e.Name(), ".git")); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func updateSettings(claudeDir string) error {
